@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, Eye, EyeOff } from 'lucide-react';
 import { AppConfig, AppConfigUpdate } from '../types';
 import { apiService } from '../services/api';
-import KeyInput from '../components/KeyInput';
 import UploadDropzone from '../components/UploadDropzone';
 import ToolManager from '../components/ToolManager';
 import GenerateContentModal from '../components/GenerateContentModal';
@@ -19,6 +18,8 @@ const AdminConsole: React.FC = () => {
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [showOpenAIKey, setShowOpenAIKey] = useState(false);
+  const [showLakeraKey, setShowLakeraKey] = useState(false);
   const ragManagementRef = React.useRef<RagManagementRef>(null);
 
   useEffect(() => {
@@ -399,25 +400,51 @@ const AdminConsole: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     OpenAI API Key
                   </label>
-                  <input
-                    type="password"
-                    value={config.openai_api_key || ""}
-                    onChange={(e) => handleConfigUpdate({ openai_api_key: e.target.value })}
-                    placeholder="sk-..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showOpenAIKey ? "text" : "password"}
+                      value={config.openai_api_key || ""}
+                      onChange={(e) => handleConfigUpdate({ openai_api_key: e.target.value })}
+                      placeholder="sk-..."
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOpenAIKey(!showOpenAIKey)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      {showOpenAIKey ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Lakera API Key
                   </label>
-                  <input
-                    type="password"
-                    value={config.lakera_api_key || ""}
-                    onChange={(e) => handleConfigUpdate({ lakera_api_key: e.target.value })}
-                    placeholder="lk-..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showLakeraKey ? "text" : "password"}
+                      value={config.lakera_api_key || ""}
+                      onChange={(e) => handleConfigUpdate({ lakera_api_key: e.target.value })}
+                      placeholder="lk-..."
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLakeraKey(!showLakeraKey)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      {showLakeraKey ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
