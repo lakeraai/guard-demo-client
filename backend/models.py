@@ -18,7 +18,7 @@ class AppConfig(Base):
     logo_url = Column(String, nullable=True)
     system_prompt = Column(Text, nullable=True)
     openai_model = Column(String, default="gpt-4o-mini")
-    temperature = Column(String, default="0.7")
+    temperature = Column(String, default="7")
     lakera_enabled = Column(Boolean, default=True)
     lakera_blocking_mode = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

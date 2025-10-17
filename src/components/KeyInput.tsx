@@ -36,23 +36,25 @@ const KeyInput: React.FC<KeyInputProps> = ({
       </label>
       <div className="relative">
         <input
-          type={showKey ? 'text' : 'password'}
-          value={showKey ? value : maskKey(value)}
+          type="password"
+          value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
+          placeholder={value ? (showKey ? value : maskKey(value)) : placeholder}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
         />
-        <button
-          type="button"
-          onClick={toggleVisibility}
-          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-        >
-          {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
+        {value && (
+          <button
+            type="button"
+            onClick={toggleVisibility}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+          >
+            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        )}
       </div>
-      {value && !showKey && (
+      {value && (
         <p className="text-xs text-gray-500">
-          Click the eye icon to reveal the full key
+          {showKey ? 'Click the eye icon to hide the key' : 'Click the eye icon to reveal the full key'}
         </p>
       )}
     </div>

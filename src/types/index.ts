@@ -12,6 +12,8 @@ export interface AppConfig {
   openai_model: string;
   temperature: number;
   system_prompt?: string;
+  openai_api_key?: string;
+  lakera_api_key?: string;
   created_at: string;
   updated_at: string;
 }

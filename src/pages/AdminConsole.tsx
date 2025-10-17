@@ -395,18 +395,30 @@ const AdminConsole: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <KeyInput
-                  label="OpenAI API Key"
-                  value=""
-                  onChange={(value) => handleConfigUpdate({ openai_api_key: value })}
-                  placeholder="sk-..."
-                />
-                <KeyInput
-                  label="Lakera API Key"
-                  value=""
-                  onChange={(value) => handleConfigUpdate({ lakera_api_key: value })}
-                  placeholder="lk-..."
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    OpenAI API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={config.openai_api_key || ""}
+                    onChange={(e) => handleConfigUpdate({ openai_api_key: e.target.value })}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Lakera API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={config.lakera_api_key || ""}
+                    onChange={(e) => handleConfigUpdate({ lakera_api_key: e.target.value })}
+                    placeholder="lk-..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Lakera Project ID (Optional)

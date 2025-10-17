@@ -17,6 +17,8 @@ class AppConfigBase(BaseModel):
 
 class AppConfigResponse(AppConfigBase):
     id: int
+    openai_api_key: Optional[str] = None
+    lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
