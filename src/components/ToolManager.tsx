@@ -141,8 +141,8 @@ const ToolManager: React.FC = () => {
                 onChange={(e) => setNewTool({ ...newTool, type: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="mcp">MCP</option>
-                <option value="http">HTTP</option>
+                <option value="mcp">MCP (SSE Endpoint)</option>
+                <option value="http">HTTP (MCP Endpoint)</option>
               </select>
             </div>
             <div className="md:col-span-2">
@@ -259,8 +259,8 @@ const ToolManager: React.FC = () => {
                         onChange={(e) => setEditingTool({ ...editingTool, type: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
-                        <option value="mcp">MCP</option>
-                        <option value="http">HTTP</option>
+                        <option value="mcp">MCP (SSE Endpoint)</option>
+                        <option value="http">HTTP (MCP Endpoint)</option>
                       </select>
                     </div>
                     <div className="md:col-span-2">
