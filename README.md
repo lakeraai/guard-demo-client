@@ -37,7 +37,35 @@ git clone <repository-url>
 cd lakeraclientdemov2
 ```
 
-### 2. Backend Setup
+## 🚀 Quick Start (Recommended)
+
+### Fastest Method: Use start_all.py
+
+The easiest way to get started is using the `start_all.py` script, which handles most of the setup for you:
+
+```bash
+# 1. First, create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 2. Then run the startup script
+python start_all.py
+```
+
+**The script will:**
+- Install all Python dependencies from `requirements.txt`
+- Install all Node.js dependencies from `package.json`
+- Start the backend server on port 8000
+- Start the frontend server on port 3000
+- Open your browser to the demo page
+
+**Note:** You still need to create and activate the virtual environment first, but the script handles all the dependency installation and service startup for you.
+
+## 🛠️ Manual Setup (Alternative)
+
+If you prefer to set up the components manually or need more control:
+
+### Backend Setup
 
 ```bash
 # Create virtual environment
@@ -47,11 +75,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Initialize database (will be created automatically on first run)
+# Start backend server
 python start_backend.py
 ```
 
-### 3. Frontend Setup
+### Frontend Setup
 
 ```bash
 # Install dependencies
@@ -61,9 +89,7 @@ npm install
 npm run dev
 ```
 
-## 🚀 Quick Start
-
-### Option 1: Separate Terminals
+### Running Both Services
 
 **Terminal 1 - Backend:**
 ```bash
@@ -75,22 +101,12 @@ python start_backend.py
 npm run dev
 ```
 
-### Option 2: Using the Startup Script
-
-```bash
-# Make the script executable
-chmod +x start_backend.py
-
-# Start backend
-./start_backend.py
-```
-
 ## 🌐 Access Points
 
 - **Demo Page**: http://localhost:3000
 - **Admin Console**: http://localhost:3000/admin
-- **API Documentation**: http://localhost:8000/docs
 - **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs (if available)
 
 ## ⚙️ Configuration
 
@@ -301,7 +317,7 @@ lakeraclientdemov2/
 
 - Backend logs: Check terminal running `start_backend.py`
 - Frontend logs: Check browser console
-- API logs: Available at http://localhost:8000/docs
+- API logs: Check backend terminal output
 
 ## 🤝 Contributing
 
@@ -319,9 +335,9 @@ This project is licensed under the MIT License.
 
 For issues and questions:
 1. Check the troubleshooting section
-2. Review API documentation at http://localhost:8000/docs
-3. Check the browser console for errors
-4. Review backend logs in the terminal
+2. Check the browser console for errors
+3. Review backend logs in the terminal
+4. Check the API endpoints in the code if needed
 
 ---
 
