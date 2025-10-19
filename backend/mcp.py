@@ -8,7 +8,6 @@ from typing import Dict, Any, Optional, List, Tuple
 from urllib.parse import urljoin, urlparse, parse_qs
 
 import requests
-from jsonschema import validate, ValidationError
 
 # Safer default; servers may reply with their version.
 INIT_PARAMS = {
@@ -62,6 +61,11 @@ class HTTPTransport(MCPTransport):
 
     def _parse_json(self, r: requests.Response, body: str) -> Dict[str, Any]:
         if r.status_code >= 400:
+            # Special handling for MCP protocol issues
+            if r.status_code == 400 and "unsupported" in body.lower():
+                print(f"Warning: Server doesn't support standard MCP protocol (HTTP {r.status_code}): {body}")
+                # Return a minimal response to continue
+                return {"serverInfo": {"name": "Unknown Server", "version": "1.0.0"}}
             raise RuntimeError(f"HTTP {r.status_code} from {self.base_url}: {body}")
         if body.lstrip().startswith("event:"):
             raise RuntimeError(
@@ -76,9 +80,17 @@ class HTTPTransport(MCPTransport):
         req = {"jsonrpc": "2.0", "id": self._next_id(), "method": "initialize", "params": INIT_PARAMS}
         r, body = self._post_raw(req)
         res = self._parse_json(r, body)
-        # Best-effort notification
-        self.session.post(self.base_url, json={"jsonrpc": "2.0", "method": "initialized", "params": {}},
-                          timeout=self.timeout, headers=self._headers())
+        # Best-effort notification - don't fail if server doesn't support it
+        try:
+            print(f"🔧 Sending 'initialized' notification to {self.base_url}")
+            init_response = self.session.post(self.base_url, json={"jsonrpc": "2.0", "method": "initialized", "params": {}},
+                              timeout=self.timeout, headers=self._headers())
+            print(f"🔧 'initialized' response: {init_response.status_code}")
+            if init_response.status_code >= 400:
+                print(f"Warning: Server doesn't support 'initialized' notification (HTTP {init_response.status_code}): {init_response.text}")
+        except Exception as e:
+            # Server doesn't support initialized notification, continue anyway
+            print(f"Warning: Server doesn't support 'initialized' notification: {e}")
         if "error" in res:
             raise RuntimeError(f"MCP error {res['error']}")
         return res.get("result", res)
@@ -239,11 +251,19 @@ class SSETransport(MCPTransport):
         payload = {"jsonrpc": "2.0", "id": req_id, "method": "initialize", "params": INIT_PARAMS}
         self._resp_map[req_id] = queue.Queue()
 
+        print(f"🔧 SSE Sending 'initialize' request to {self._post_target()}")
         r = self.session.post(self._post_target(), json=payload, timeout=self.timeout, headers=self._headers())
+        print(f"🔧 SSE 'initialize' response: {r.status_code}")
         sid = r.headers.get("Mcp-Session-Id") or r.headers.get("MCP-Session-Id")
         if sid:
             self.session_id = sid
         if r.status_code >= 400:
+            print(f"Warning: Server returned HTTP {r.status_code} for 'initialize' request: {r.text}")
+            # Try to continue anyway - some servers might still work
+            if r.status_code == 400 and "unsupported" in r.text.lower():
+                print("🔧 Server doesn't support standard MCP protocol, trying to continue...")
+                # Return a minimal response to continue
+                return {"serverInfo": {"name": "Unknown Server", "version": "1.0.0"}}
             raise RuntimeError(f"HTTP {r.status_code} posting 'initialize': {r.text}")
 
         env = self._parse_post_body_as_jsonrpc(r.text)
@@ -257,14 +277,20 @@ class SSETransport(MCPTransport):
         if "error" in env:
             raise RuntimeError(f"MCP error {env['error']}")
 
-        # Required notification
-        note = {"jsonrpc": "2.0", "method": "initialized", "params": {}}
-        nr = self.session.post(self._post_target(), json=note, timeout=self.timeout, headers=self._headers())
-        sid = nr.headers.get("Mcp-Session-Id") or nr.headers.get("MCP-Session-Id")
-        if sid:
-            self.session_id = sid
-        if nr.status_code >= 400:
-            raise RuntimeError(f"HTTP {nr.status_code} posting 'initialized': {nr.text}")
+        # Required notification - but handle gracefully if server doesn't support it
+        try:
+            print(f"🔧 SSE Sending 'initialized' notification to {self._post_target()}")
+            note = {"jsonrpc": "2.0", "method": "initialized", "params": {}}
+            nr = self.session.post(self._post_target(), json=note, timeout=self.timeout, headers=self._headers())
+            print(f"🔧 SSE 'initialized' response: {nr.status_code}")
+            sid = nr.headers.get("Mcp-Session-Id") or nr.headers.get("MCP-Session-Id")
+            if sid:
+                self.session_id = sid
+            if nr.status_code >= 400:
+                print(f"Warning: Server doesn't support 'initialized' notification (HTTP {nr.status_code}): {nr.text}")
+        except Exception as e:
+            # Server doesn't support initialized notification, continue anyway
+            print(f"Warning: Server doesn't support 'initialized' notification: {e}")
 
         return env.get("result", env)
 
