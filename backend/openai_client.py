@@ -22,6 +22,9 @@ class OpenAIClient:
     def get_models(self) -> List[str]:
         """Get available OpenAI models"""
         return [
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-5-nano",
             "gpt-4o",
             "gpt-4o-mini", 
             "gpt-4",
