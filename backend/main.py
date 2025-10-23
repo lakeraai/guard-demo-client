@@ -22,6 +22,7 @@ from .schemas import (
 from .agent import run_agent, AgentRequest
 from . import lakera, rag
 from .toolhive import enabled_tools, discover_mcp_tool_capabilities_sync, store_capabilities
+from .openai_client import openai_client
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -825,3 +826,12 @@ async def get_last_lakera_result():
     if result is None:
         raise HTTPException(status_code=404, detail="No Lakera result available")
     return result
+
+@app.get("/api/models")
+async def get_available_models():
+    """Get available OpenAI models"""
+    try:
+        models = openai_client.get_models()
+        return {"models": models}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")

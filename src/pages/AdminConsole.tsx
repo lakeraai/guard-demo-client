@@ -21,11 +21,33 @@ const AdminConsole: React.FC = () => {
   const [showOpenAIKey, setShowOpenAIKey] = useState(false);
   const [showLakeraKey, setShowLakeraKey] = useState(false);
   const [showMCPInstructions, setShowMCPInstructions] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const ragManagementRef = React.useRef<RagManagementRef>(null);
 
   useEffect(() => {
     loadConfig();
+    loadModels();
   }, []);
+
+  const loadModels = async () => {
+    try {
+      const modelsData = await apiService.getModels();
+      setAvailableModels(modelsData.models);
+    } catch (error) {
+      console.error('Failed to load models:', error);
+      // Fallback to hardcoded models if API fails
+      setAvailableModels([
+        "gpt-5",
+        "gpt-5-mini", 
+        "gpt-5-nano",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo"
+      ]);
+    }
+  };
 
   const loadConfig = async () => {
     try {
@@ -407,11 +429,11 @@ const AdminConsole: React.FC = () => {
                     onChange={(e) => handleConfigUpdate({ openai_model: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    <option value="gpt-4o">GPT-4o</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gpt-4">GPT-4</option>
-                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    {availableModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>

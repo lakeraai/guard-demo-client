@@ -194,6 +194,11 @@ class ApiService {
       method: 'POST',
     });
   }
+
+  // Models endpoint
+  async getModels(): Promise<{ models: string[] }> {
+    return this.request<{ models: string[] }>('/models');
+  }
 }
 
 export const apiService = new ApiService();
