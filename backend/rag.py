@@ -2,12 +2,14 @@ import os
 os.environ["CHROMA_TELEMETRY_ENABLED"] = "false"
 import chromadb
 from chromadb.config import Settings
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import uuid
+import csv
+import json
+import re
 from .openai_client import openai_client
 from .database import get_db
 from .models import AppConfig, RagSource
-import re
 
 # Initialize ChromaDB
 chroma_client = chromadb.PersistentClient(
@@ -84,7 +86,7 @@ def reinitialize_chromadb():
             print("ℹ️ ChromaDB will be reinitialized on next application restart")
 
 def chunk_text(text: str, chunk_size: int = 800, overlap: int = 200) -> List[str]:
-    """Split text into overlapping chunks"""
+    """Split text into overlapping chunks (fallback for unknown file types)"""
     if len(text) <= chunk_size:
         return [text]
     
@@ -97,6 +99,189 @@ def chunk_text(text: str, chunk_size: int = 800, overlap: int = 200) -> List[str
         start = end - overlap
     
     return chunks
+
+def chunk_csv(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """
+    Chunk CSV content row by row with headers as metadata
+    Returns list of (chunk_text, metadata) tuples
+    """
+    try:
+        import io
+        csv_reader = csv.DictReader(io.StringIO(content))
+        rows = list(csv_reader)
+        
+        if not rows:
+            return []
+        
+        # Get headers for metadata
+        headers = list(rows[0].keys())
+        
+        chunks = []
+        for i, row in enumerate(rows):
+            # Create a readable text representation of the row
+            row_text = f"Row {i+1}: " + " | ".join([f"{k}: {v}" for k, v in row.items()])
+            
+            # Create metadata with headers and row info
+            metadata = {
+                "file_type": "csv",
+                "filename": filename,
+                "headers": headers,
+                "row_number": i + 1,
+                "total_rows": len(rows),
+                "chunk_type": "csv_row"
+            }
+            
+            chunks.append((row_text, metadata))
+        
+        return chunks
+        
+    except Exception as e:
+        print(f"CSV chunking error: {e}")
+        # Fallback to text chunking
+        return [(content, {"file_type": "csv", "filename": filename, "chunk_type": "csv_fallback"})]
+
+def chunk_json(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """
+    Chunk JSON content object by object
+    Returns list of (chunk_text, metadata) tuples
+    """
+    try:
+        data = json.loads(content)
+        chunks = []
+        
+        if isinstance(data, list):
+            # Array of objects
+            for i, item in enumerate(data):
+                item_text = json.dumps(item, indent=2)
+                metadata = {
+                    "file_type": "json",
+                    "filename": filename,
+                    "item_index": i,
+                    "total_items": len(data),
+                    "chunk_type": "json_object"
+                }
+                chunks.append((item_text, metadata))
+                
+        elif isinstance(data, dict):
+            # Single object - chunk by top-level keys
+            for key, value in data.items():
+                item_text = f"{key}: {json.dumps(value, indent=2)}"
+                metadata = {
+                    "file_type": "json",
+                    "filename": filename,
+                    "key": key,
+                    "chunk_type": "json_key_value"
+                }
+                chunks.append((item_text, metadata))
+        else:
+            # Primitive value
+            chunks.append((str(data), {
+                "file_type": "json",
+                "filename": filename,
+                "chunk_type": "json_primitive"
+            }))
+        
+        return chunks
+        
+    except Exception as e:
+        print(f"JSON chunking error: {e}")
+        # Fallback to text chunking
+        return [(content, {"file_type": "json", "filename": filename, "chunk_type": "json_fallback"})]
+
+def chunk_markdown(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """
+    Chunk Markdown content by sections (headers)
+    Returns list of (chunk_text, metadata) tuples
+    """
+    try:
+        # Split by markdown headers (# ## ###)
+        sections = re.split(r'\n(?=#{1,6}\s)', content)
+        
+        chunks = []
+        for i, section in enumerate(sections):
+            if not section.strip():
+                continue
+                
+            # Extract header level and title
+            header_match = re.match(r'^(#{1,6})\s+(.+)', section)
+            if header_match:
+                header_level = len(header_match.group(1))
+                header_title = header_match.group(2).strip()
+            else:
+                header_level = 0
+                header_title = f"Section {i+1}"
+            
+            metadata = {
+                "file_type": "markdown",
+                "filename": filename,
+                "section_index": i,
+                "header_level": header_level,
+                "header_title": header_title,
+                "chunk_type": "markdown_section"
+            }
+            
+            chunks.append((section.strip(), metadata))
+        
+        return chunks
+        
+    except Exception as e:
+        print(f"Markdown chunking error: {e}")
+        # Fallback to text chunking
+        return [(content, {"file_type": "markdown", "filename": filename, "chunk_type": "markdown_fallback"})]
+
+def chunk_pdf(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """
+    Chunk PDF content by pages with structure preservation
+    Returns list of (chunk_text, metadata) tuples
+    """
+    try:
+        # Split by page breaks (if available) or by paragraphs
+        pages = content.split('\f') if '\f' in content else content.split('\n\n')
+        
+        chunks = []
+        for i, page in enumerate(pages):
+            if not page.strip():
+                continue
+                
+            metadata = {
+                "file_type": "pdf",
+                "filename": filename,
+                "page_number": i + 1,
+                "total_pages": len(pages),
+                "chunk_type": "pdf_page"
+            }
+            
+            chunks.append((page.strip(), metadata))
+        
+        return chunks
+        
+    except Exception as e:
+        print(f"PDF chunking error: {e}")
+        # Fallback to text chunking
+        return [(content, {"file_type": "pdf", "filename": filename, "chunk_type": "pdf_fallback"})]
+
+def chunk_by_file_type(content: str, filename: str, mimetype: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """
+    Route to appropriate chunking strategy based on file type
+    Returns list of (chunk_text, metadata) tuples
+    """
+    # Determine file type from mimetype and filename
+    if mimetype == "text/csv" or filename.endswith('.csv'):
+        return chunk_csv(content, filename)
+    elif mimetype == "application/json" or filename.endswith('.json'):
+        return chunk_json(content, filename)
+    elif mimetype == "text/markdown" or filename.endswith(('.md', '.markdown')):
+        return chunk_markdown(content, filename)
+    elif mimetype == "application/pdf" or filename.endswith('.pdf'):
+        return chunk_pdf(content, filename)
+    else:
+        # Fallback to generic text chunking
+        chunks = chunk_text(content)
+        return [(chunk, {
+            "file_type": "text",
+            "filename": filename,
+            "chunk_type": "text_generic"
+        }) for chunk in chunks]
 
 async def retrieve(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
     """
@@ -129,14 +314,15 @@ async def retrieve(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
 
 async def ingest_file(path: str, mimetype: str, meta: Dict[str, Any], db=None) -> Dict[str, Any]:
     """
-    Ingest a file into the RAG system
+    Ingest a file into the RAG system using file-type-specific chunking
     Returns dict with source_id, chunks count, and metadata
     """
     try:
         # Read file content based on type
         content = ""
+        filename = meta.get("name", "unknown")
         
-        if mimetype == "text/markdown" or mimetype == "text/plain" or mimetype == "text/csv":
+        if mimetype in ["text/markdown", "text/plain", "text/csv", "application/json"]:
             with open(path, 'r', encoding='utf-8') as f:
                 content = f.read()
         elif mimetype == "application/pdf":
@@ -155,8 +341,8 @@ async def ingest_file(path: str, mimetype: str, meta: Dict[str, Any], db=None) -
         else:
             raise Exception(f"Unsupported file type: {mimetype}")
         
-        # Ingest the content
-        return await ingest_markdown(content, meta, db)
+        # Use file-type-specific chunking
+        return await ingest_with_smart_chunking(content, filename, mimetype, meta, db)
         
     except Exception as e:
         print(f"File ingestion error: {e}")
@@ -215,13 +401,24 @@ Constraints: {options.get('constraints', '')}
         print(f"Seed pack generation error: {e}")
         return f"# Error generating content for {industry}\n\nFailed to generate content: {str(e)}"
 
-async def ingest_markdown(markdown: str, source_meta: Dict[str, Any], db=None) -> Dict[str, Any]:
+async def ingest_with_smart_chunking(content: str, filename: str, mimetype: str, source_meta: Dict[str, Any], db=None) -> Dict[str, Any]:
     """
-    Ingest markdown content into RAG system
+    Ingest content using file-type-specific chunking strategies
     """
     try:
-        # Chunk the markdown
-        chunks = chunk_text(markdown)
+        # Get file-type-specific chunks with metadata
+        chunk_data = chunk_by_file_type(content, filename, mimetype)
+        
+        if not chunk_data:
+            return {
+                "source_id": "error",
+                "chunks": 0,
+                "metadata": source_meta
+            }
+        
+        # Extract chunks and metadata
+        chunks = [chunk_text for chunk_text, _ in chunk_data]
+        chunk_metadata = [chunk_meta for _, chunk_meta in chunk_data]
         
         # Get embeddings for chunks
         try:
@@ -233,16 +430,23 @@ async def ingest_markdown(markdown: str, source_meta: Dict[str, Any], db=None) -
         # Generate IDs for chunks
         chunk_ids = [str(uuid.uuid4()) for _ in chunks]
         
+        # Combine source metadata with chunk-specific metadata
+        combined_metadata = []
+        for i, (chunk_meta, source_meta_copy) in enumerate(zip(chunk_metadata, [source_meta.copy()] * len(chunk_metadata))):
+            combined_meta = {
+                **source_meta_copy,
+                **chunk_meta,
+                "chunk_index": i,
+                "total_chunks": len(chunks)
+            }
+            combined_metadata.append(combined_meta)
+        
         # Add to ChromaDB
         collection.add(
             documents=chunks,
             embeddings=embeddings,
             ids=chunk_ids,
-            metadatas=[{
-                **source_meta,
-                "chunk_index": i,
-                "total_chunks": len(chunks)
-            } for i in range(len(chunks))]
+            metadatas=combined_metadata
         )
         
         # Save to database
@@ -253,9 +457,9 @@ async def ingest_markdown(markdown: str, source_meta: Dict[str, Any], db=None) -
             should_close = False
             
         rag_source = RagSource(
-            name=source_meta.get("name", "Generated Content"),
-            content=markdown[:1000] + "..." if len(markdown) > 1000 else markdown,  # Store first 1000 chars as preview
-            source_type=source_meta.get("source_type", "generated"),
+            name=source_meta.get("name", "Uploaded Content"),
+            content=content[:1000] + "..." if len(content) > 1000 else content,  # Store first 1000 chars as preview
+            source_type=source_meta.get("source_type", "uploaded"),
             chunks_count=len(chunks)
         )
         db.add(rag_source)
@@ -269,6 +473,22 @@ async def ingest_markdown(markdown: str, source_meta: Dict[str, Any], db=None) -
             "chunks": len(chunks),
             "metadata": source_meta
         }
+        
+    except Exception as e:
+        print(f"Smart chunking ingestion error: {e}")
+        return {
+            "source_id": "error",
+            "chunks": 0,
+            "metadata": source_meta
+        }
+
+async def ingest_markdown(markdown: str, source_meta: Dict[str, Any], db=None) -> Dict[str, Any]:
+    """
+    Ingest markdown content into RAG system (legacy function for backward compatibility)
+    """
+    try:
+        # Use smart chunking for markdown
+        return await ingest_with_smart_chunking(markdown, "generated.md", "text/markdown", source_meta, db)
         
     except Exception as e:
         print(f"Markdown ingestion error: {e}")
