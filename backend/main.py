@@ -488,7 +488,8 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
             'application/pdf': '.pdf',
             'text/markdown': '.md',
             'text/plain': '.txt',
-            'text/csv': '.csv'
+            'text/csv': '.csv',
+            'application/octet-stream': '.csv'  # Allow CSV files detected as octet-stream
         }
         
         if file.content_type not in allowed_types:

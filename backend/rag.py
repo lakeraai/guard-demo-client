@@ -117,6 +117,20 @@ def chunk_csv(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
         headers = list(rows[0].keys())
         
         chunks = []
+        
+        # Add summary chunk first (most important for count queries)
+        summary_text = f"Dataset Summary: {len(rows)} total records in {filename}. Columns: {', '.join(headers)}. This dataset contains {len(rows)} rows of data with {len(headers)} columns."
+        summary_metadata = {
+            "file_type": "csv",
+            "filename": filename,
+            "headers": ", ".join(headers),
+            "total_rows": len(rows),
+            "total_columns": len(headers),
+            "chunk_type": "csv_summary"
+        }
+        chunks.append((summary_text, summary_metadata))
+        
+        # Add individual row chunks
         for i, row in enumerate(rows):
             # Create a readable text representation of the row
             row_text = f"Row {i+1}: " + " | ".join([f"{k}: {v}" for k, v in row.items()])
@@ -125,7 +139,7 @@ def chunk_csv(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
             metadata = {
                 "file_type": "csv",
                 "filename": filename,
-                "headers": headers,
+                "headers": ", ".join(headers),  # Convert list to comma-separated string
                 "row_number": i + 1,
                 "total_rows": len(rows),
                 "chunk_type": "csv_row"
@@ -150,7 +164,22 @@ def chunk_json(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
         chunks = []
         
         if isinstance(data, list):
-            # Array of objects
+            # Array of objects - add summary chunk
+            if len(data) > 1:  # Only add summary for arrays with multiple items
+                summary_text = f"JSON Dataset Summary: {len(data)} items in {filename}. This JSON array contains {len(data)} objects."
+                if data and isinstance(data[0], dict):
+                    keys = list(data[0].keys())
+                    summary_text += f" Each object has {len(keys)} fields: {', '.join(keys)}."
+                
+                summary_metadata = {
+                    "file_type": "json",
+                    "filename": filename,
+                    "total_items": len(data),
+                    "chunk_type": "json_summary"
+                }
+                chunks.append((summary_text, summary_metadata))
+            
+            # Add individual items
             for i, item in enumerate(data):
                 item_text = json.dumps(item, indent=2)
                 metadata = {
@@ -163,7 +192,17 @@ def chunk_json(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
                 chunks.append((item_text, metadata))
                 
         elif isinstance(data, dict):
-            # Single object - chunk by top-level keys
+            # Single object - add summary chunk
+            summary_text = f"JSON Object Summary: {len(data)} top-level keys in {filename}: {', '.join(data.keys())}."
+            summary_metadata = {
+                "file_type": "json",
+                "filename": filename,
+                "total_keys": len(data),
+                "chunk_type": "json_summary"
+            }
+            chunks.append((summary_text, summary_metadata))
+            
+            # Add individual key-value pairs
             for key, value in data.items():
                 item_text = f"{key}: {json.dumps(value, indent=2)}"
                 metadata = {
@@ -174,7 +213,7 @@ def chunk_json(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
                 }
                 chunks.append((item_text, metadata))
         else:
-            # Primitive value
+            # Primitive value - no summary needed
             chunks.append((str(data), {
                 "file_type": "json",
                 "filename": filename,
@@ -198,6 +237,26 @@ def chunk_markdown(content: str, filename: str) -> List[Tuple[str, Dict[str, Any
         sections = re.split(r'\n(?=#{1,6}\s)', content)
         
         chunks = []
+        
+        # Add summary chunk for multi-section documents
+        if len(sections) > 1:
+            # Extract section titles for summary
+            section_titles = []
+            for section in sections:
+                header_match = re.match(r'^(#{1,6})\s+(.+)', section)
+                if header_match:
+                    section_titles.append(header_match.group(2).strip())
+            
+            summary_text = f"Document Summary: {len(sections)} sections in {filename}. Sections: {', '.join(section_titles[:5])}{'...' if len(section_titles) > 5 else ''}."
+            summary_metadata = {
+                "file_type": "markdown",
+                "filename": filename,
+                "total_sections": len(sections),
+                "chunk_type": "markdown_summary"
+            }
+            chunks.append((summary_text, summary_metadata))
+        
+        # Add individual section chunks
         for i, section in enumerate(sections):
             if not section.strip():
                 continue
@@ -239,6 +298,19 @@ def chunk_pdf(content: str, filename: str) -> List[Tuple[str, Dict[str, Any]]]:
         pages = content.split('\f') if '\f' in content else content.split('\n\n')
         
         chunks = []
+        
+        # Add summary chunk for multi-page documents
+        if len(pages) > 1:
+            summary_text = f"PDF Document Summary: {len(pages)} pages in {filename}. This document contains {len(pages)} pages of content."
+            summary_metadata = {
+                "file_type": "pdf",
+                "filename": filename,
+                "total_pages": len(pages),
+                "chunk_type": "pdf_summary"
+            }
+            chunks.append((summary_text, summary_metadata))
+        
+        # Add individual page chunks
         for i, page in enumerate(pages):
             if not page.strip():
                 continue
@@ -307,6 +379,34 @@ async def retrieve(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
                     "metadata": metadata
                 })
         
+        # Smart retrieval: prioritize summary chunks for count/statistical queries
+        count_keywords = ['how many', 'total', 'count', 'number of', 'records', 'items', 'customers', 'users', 'pages', 'sections']
+        is_count_query = any(keyword in query.lower() for keyword in count_keywords)
+        
+        if is_count_query:
+            # For count queries, do a separate search specifically for summary chunks
+            try:
+                # Get all documents and filter for summary chunks
+                all_docs = collection.get()
+                summary_chunks = []
+                
+                for i, metadata in enumerate(all_docs['metadatas']):
+                    if metadata.get('chunk_type', '').endswith('_summary'):
+                        summary_chunks.append({
+                            'text': all_docs['documents'][i],
+                            'metadata': metadata
+                        })
+                
+                print(f"🔍 Count query detected. Found {len(summary_chunks)} summary chunks in database")
+                if summary_chunks:
+                    print(f"📊 Summary chunk text: {summary_chunks[0]['text'][:100]}...")
+                    # Return summary chunks first, then other relevant chunks
+                    other_chunks = [doc for doc in documents if not doc.get('metadata', {}).get('chunk_type', '').endswith('_summary')]
+                    return summary_chunks + other_chunks[:top_k - len(summary_chunks)]
+            except Exception as e:
+                print(f"Error searching for summary chunks: {e}")
+                # Fall back to regular search
+        
         return documents
     except Exception as e:
         print(f"RAG retrieval error: {e}")
@@ -325,6 +425,11 @@ async def ingest_file(path: str, mimetype: str, meta: Dict[str, Any], db=None) -
         if mimetype in ["text/markdown", "text/plain", "text/csv", "application/json"]:
             with open(path, 'r', encoding='utf-8') as f:
                 content = f.read()
+        elif mimetype == "application/octet-stream" and filename.endswith('.csv'):
+            # Handle CSV files detected as octet-stream
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            mimetype = "text/csv"  # Override mimetype for proper chunking
         elif mimetype == "application/pdf":
             # For PDF, we'll use a simple text extraction
             # In a real implementation, you'd use PyPDF2 or similar
@@ -465,11 +570,14 @@ async def ingest_with_smart_chunking(content: str, filename: str, mimetype: str,
         db.add(rag_source)
         db.commit()
         
+        # Get the ID before closing the session
+        source_id = str(rag_source.id)
+        
         if should_close:
             db.close()
         
         return {
-            "source_id": str(rag_source.id),
+            "source_id": source_id,
             "chunks": len(chunks),
             "metadata": source_meta
         }
