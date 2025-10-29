@@ -10,6 +10,11 @@ import re
 from .openai_client import openai_client
 from .database import get_db
 from .models import AppConfig, RagSource
+from .lakera import check_interaction
+
+# Global variables to store RAG scanning results and progress
+_last_rag_scanning_result: Optional[Dict[str, Any]] = None
+_rag_scanning_progress: Optional[Dict[str, Any]] = None
 
 # Initialize ChromaDB
 chroma_client = chromadb.PersistentClient(
@@ -412,6 +417,63 @@ async def retrieve(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         print(f"RAG retrieval error: {e}")
         return []
 
+def get_last_rag_scanning_result() -> Optional[Dict[str, Any]]:
+    """Get the last RAG content scanning result"""
+    global _last_rag_scanning_result
+    return _last_rag_scanning_result
+
+def get_rag_scanning_progress() -> Optional[Dict[str, Any]]:
+    """Get the current RAG scanning progress"""
+    global _rag_scanning_progress
+    return _rag_scanning_progress
+
+async def scan_chunk_content(chunk_text: str, config: AppConfig) -> Tuple[bool, Optional[str]]:
+    """
+    Scan a single chunk for malicious content using Lakera Guard
+    Returns (is_safe, reason_if_unsafe)
+    """
+    try:
+        print(f"🔍 Scanning chunk: {chunk_text[:100]}...")
+        if not config.lakera_enabled or not config.lakera_api_key:
+            print("⚠️ Lakera not enabled or no API key")
+            return True, None
+        
+        # Create a simple message format for Lakera
+        messages = [{"role": "user", "content": chunk_text}]
+        
+        # Use RAG-specific project ID if available, otherwise fall back to main project ID
+        project_id = config.rag_lakera_project_id or config.lakera_project_id
+        
+        # Scan the content
+        result = await check_interaction(
+            messages=messages,
+            api_key=config.lakera_api_key,
+            project_id=project_id
+        )
+        print(f"🔍 Lakera result: {result}")
+        
+        if result is None:
+            # If Lakera is not available, assume safe
+            return True, None
+        
+        # Check if the content is flagged as unsafe
+        flagged = result.get("flagged", False)
+        if flagged:
+            # Get the first detected threat type as the reason
+            breakdown = result.get("breakdown", [])
+            for detector in breakdown:
+                if detector.get("detected", False):
+                    reason = detector.get("detector_type", "malicious content")
+                    return False, reason
+            return False, "malicious content"
+        
+        return True, None
+        
+    except Exception as e:
+        print(f"Error scanning chunk content: {e}")
+        # If scanning fails, assume safe to avoid blocking legitimate content
+        return True, None
+
 async def ingest_file(path: str, mimetype: str, meta: Dict[str, Any], db=None) -> Dict[str, Any]:
     """
     Ingest a file into the RAG system using file-type-specific chunking
@@ -510,6 +572,8 @@ async def ingest_with_smart_chunking(content: str, filename: str, mimetype: str,
     """
     Ingest content using file-type-specific chunking strategies
     """
+    global _last_rag_scanning_result
+    
     try:
         # Get file-type-specific chunks with metadata
         chunk_data = chunk_by_file_type(content, filename, mimetype)
@@ -525,9 +589,153 @@ async def ingest_with_smart_chunking(content: str, filename: str, mimetype: str,
         chunks = [chunk_text for chunk_text, _ in chunk_data]
         chunk_metadata = [chunk_meta for _, chunk_meta in chunk_data]
         
+        # Get configuration for content scanning
+        if db is None:
+            temp_db = next(get_db())
+            should_close_db = True
+        else:
+            temp_db = db
+            should_close_db = False
+            
+        config = temp_db.query(AppConfig).first()
+        
+        # Scan chunks if RAG content scanning is enabled
+        safe_chunks = []
+        safe_chunk_metadata = []
+        blocked_chunks = 0
+        scanning_results = []
+        
+        print(f"🔍 Config check: rag_content_scanning={config.rag_content_scanning if config else 'None'}, lakera_enabled={config.lakera_enabled if config else 'None'}")
+        if config and config.rag_content_scanning and config.lakera_enabled:
+            print(f"🔍 Scanning {len(chunks)} chunks for malicious content...")
+            
+            # Initialize progress tracking
+            global _rag_scanning_progress
+            _rag_scanning_progress = {
+                "isScanning": True,
+                "current": 0,
+                "total": len(chunks),
+                "filename": filename
+            }
+            
+            for i, (chunk_text, chunk_meta) in enumerate(zip(chunks, chunk_metadata)):
+                try:
+                    # Update progress
+                    _rag_scanning_progress["current"] = i + 1
+                    
+                    is_safe, reason = await scan_chunk_content(chunk_text, config)
+                    
+                    # Store detailed scanning result
+                    scanning_results.append({
+                        "chunk_index": i + 1,
+                        "chunk_text": chunk_text[:200] + "..." if len(chunk_text) > 200 else chunk_text,
+                        "is_safe": is_safe,
+                        "reason": reason,
+                        "chunk_type": chunk_meta.get("chunk_type", "unknown")
+                    })
+                    
+                    if is_safe:
+                        safe_chunks.append(chunk_text)
+                        safe_chunk_metadata.append(chunk_meta)
+                    else:
+                        blocked_chunks += 1
+                        print(f"🚫 Blocked chunk {i+1}: {reason}")
+                        
+                except Exception as e:
+                    print(f"⚠️ Error scanning chunk {i+1}: {e}")
+                    # Include chunk anyway if scanning fails
+                    safe_chunks.append(chunk_text)
+                    safe_chunk_metadata.append(chunk_meta)
+                    scanning_results.append({
+                        "chunk_index": i + 1,
+                        "chunk_text": chunk_text[:200] + "..." if len(chunk_text) > 200 else chunk_text,
+                        "is_safe": True,  # Assume safe if scanning fails
+                        "reason": f"Scanning error: {str(e)}",
+                        "chunk_type": chunk_meta.get("chunk_type", "unknown")
+                    })
+            
+            # Store the scanning result globally for the frontend to access
+            _last_rag_scanning_result = {
+                "total_chunks": len(chunks),
+                "safe_chunks": len(safe_chunks),
+                "blocked_chunks": blocked_chunks,
+                "scanning_enabled": True,
+                "results": scanning_results,
+                "filename": source_meta.get("name", "Unknown"),
+                "scan_timestamp": str(uuid.uuid4())  # Simple timestamp replacement
+            }
+            
+            print(f"✅ RAG scanning complete: {len(safe_chunks)} safe chunks, {blocked_chunks} blocked")
+            
+            # Mark scanning as complete but keep progress for a bit longer
+            _rag_scanning_progress = {
+                "isScanning": False,
+                "current": len(chunks),
+                "total": len(chunks),
+                "filename": filename
+            }
+            
+            # Clear progress after 5 seconds to allow frontend to detect completion
+            import asyncio
+            async def clear_progress_later():
+                await asyncio.sleep(5)
+                global _rag_scanning_progress
+                _rag_scanning_progress = None
+            
+            # Schedule the cleanup (don't await to avoid blocking)
+            asyncio.create_task(clear_progress_later())
+            
+            chunks = safe_chunks
+            chunk_metadata = safe_chunk_metadata
+        else:
+            # Store a result indicating scanning was not performed
+            _last_rag_scanning_result = {
+                "total_chunks": len(chunks),
+                "safe_chunks": len(chunks),
+                "blocked_chunks": 0,
+                "scanning_enabled": False,
+                "results": [],
+                "filename": source_meta.get("name", "Unknown"),
+                "scan_timestamp": str(uuid.uuid4())
+            }
+        
+        if should_close_db:
+            temp_db.close()
+        
         # Get embeddings for chunks
         try:
-            embeddings = openai_client.get_embeddings(chunks)
+            # Filter out empty or invalid chunks
+            valid_chunks = []
+            for i, chunk in enumerate(chunks):
+                if chunk and isinstance(chunk, str) and chunk.strip():
+                    valid_chunks.append(chunk.strip())
+                else:
+                    print(f"⚠️ Skipping invalid chunk {i}: {repr(chunk)}")
+            
+            if not valid_chunks:
+                print("❌ No valid chunks to embed")
+                return {
+                    "source_id": "error",
+                    "chunks": 0,
+                    "metadata": source_meta
+                }
+            
+            print(f"🔍 Getting embeddings for {len(valid_chunks)} valid chunks (filtered from {len(chunks)} total)")
+            embeddings = openai_client.get_embeddings(valid_chunks)
+            
+            # Update chunks and metadata to match valid chunks
+            if len(valid_chunks) != len(chunks):
+                print(f"⚠️ Filtered chunks: {len(chunks)} -> {len(valid_chunks)}")
+                # Re-filter metadata to match valid chunks
+                filtered_metadata = []
+                valid_chunk_metadata = []
+                for i, (chunk, meta) in enumerate(zip(chunks, chunk_metadata)):
+                    if chunk and isinstance(chunk, str) and chunk.strip():
+                        filtered_metadata.append(meta)
+                        valid_chunk_metadata.append(meta)
+                chunk_metadata = valid_chunk_metadata
+                chunks = valid_chunks
+                
         except Exception as e:
             print(f"Embeddings error: {e}")
             raise Exception(f"Failed to get embeddings: {str(e)}. Please configure OpenAI API key.")

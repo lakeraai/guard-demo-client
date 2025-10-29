@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Download, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react';
 import { AppConfig, AppConfigUpdate } from '../types';
@@ -9,25 +9,179 @@ import GenerateContentModal from '../components/GenerateContentModal';
 import RagManagement, { RagManagementRef } from '../components/RagManagement';
 import DemoPromptManager from '../components/DemoPromptManager';
 
-type TabType = 'setup' | 'branding' | 'llm' | 'rag' | 'tools' | 'security' | 'prompts' | 'export';
+type TabType = 'setup' | 'branding' | 'llm' | 'rag' | 'rag-scanning' | 'tools' | 'security' | 'prompts' | 'export';
 
 const AdminConsole: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('setup');
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [ragScanningResult, setRagScanningResult] = useState<any>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [showOpenAIKey, setShowOpenAIKey] = useState(false);
   const [showLakeraKey, setShowLakeraKey] = useState(false);
   const [showMCPInstructions, setShowMCPInstructions] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [ragScanningNotificationCount, setRagScanningNotificationCount] = useState<number>(0);
+  const [ragScanningProgress, setRagScanningProgress] = useState<{isScanning: boolean; current: number; total: number; filename?: string} | null>(null);
+  const progressPollingRef = useRef<number | null>(null);
   const ragManagementRef = React.useRef<RagManagementRef>(null);
 
   useEffect(() => {
     loadConfig();
     loadModels();
+    loadRagScanningResult();
   }, []);
+
+  // Clear notification when user views the RAG scanning report
+  useEffect(() => {
+    if (activeTab === 'rag-scanning') {
+      clearRagScanningNotification();
+    }
+  }, [activeTab]);
+
+  // Poll for RAG scanning progress
+  useEffect(() => {
+    let intervalId: number;
+    
+    const pollProgress = async () => {
+      try {
+        const progress = await apiService.getRagScanningProgress();
+        setRagScanningProgress(progress);
+        
+        // If progress is null or scanning is complete, stop polling
+        if (!progress || !progress.isScanning) {
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = 0;
+          }
+          setRagScanningProgress(null);
+        }
+      } catch (error) {
+        // No progress available, clear it and stop polling
+        setRagScanningProgress(null);
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = 0;
+        }
+      }
+    };
+
+    // Start polling if RAG content scanning is enabled (regardless of current tab)
+    if (config?.rag_content_scanning) {
+      intervalId = setInterval(pollProgress, 1000); // Poll every second
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [config?.rag_content_scanning]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (progressPollingRef.current) {
+        clearInterval(progressPollingRef.current);
+        progressPollingRef.current = null;
+      }
+    };
+  }, []);
+
+  // Start polling immediately when upload begins
+  const startProgressPolling = () => {
+    // Clear any existing polling
+    if (progressPollingRef.current) {
+      clearInterval(progressPollingRef.current);
+      progressPollingRef.current = null;
+    }
+
+    // Show progress immediately with a placeholder
+    setRagScanningProgress({
+      isScanning: true,
+      current: 0,
+      total: 1,
+      filename: "Uploading..."
+    });
+
+    let hasStartedScanning = false;
+    let consecutive404s = 0;
+
+    const pollProgress = async () => {
+      try {
+        const progress = await apiService.getRagScanningProgress();
+        setRagScanningProgress(progress);
+        
+        // Reset 404 counter on successful response
+        consecutive404s = 0;
+        
+        // If we get progress data, scanning has started
+        if (progress) {
+          hasStartedScanning = true;
+        }
+        
+        // If progress is null or scanning is complete, stop polling
+        if (!progress || !progress.isScanning) {
+          if (progressPollingRef.current) {
+            clearInterval(progressPollingRef.current);
+            progressPollingRef.current = null;
+          }
+          // Keep the progress bar visible for a moment to show completion
+          if (progress && !progress.isScanning) {
+            setTimeout(() => setRagScanningProgress(null), 2000);
+          } else {
+            setRagScanningProgress(null);
+          }
+        }
+      } catch (error: any) {
+        console.log('Progress polling error:', error?.message);
+        
+        // If we get a 404, check if scanning has started
+        if (error?.message?.includes('404') || error?.message?.includes('Not Found') || error?.message?.includes('API request failed: Not Found')) {
+          consecutive404s++;
+          
+          // If scanning has started and we get 404s, it means scanning is complete
+          if (hasStartedScanning) {
+            console.log('Stopping progress polling - scanning completed');
+            if (progressPollingRef.current) {
+              clearInterval(progressPollingRef.current);
+              progressPollingRef.current = null;
+            }
+            setRagScanningProgress(null);
+          } else {
+            // If scanning hasn't started yet, keep polling but limit consecutive 404s
+            console.log(`Scanning not started yet, 404 count: ${consecutive404s}`);
+            if (consecutive404s >= 10) {
+              console.log('Too many 404s before scanning started, stopping polling');
+              if (progressPollingRef.current) {
+                clearInterval(progressPollingRef.current);
+                progressPollingRef.current = null;
+              }
+              setRagScanningProgress(null);
+            }
+          }
+        }
+        // For other errors, keep trying for a bit
+      }
+    };
+    
+    // Start polling immediately, then continue with interval
+    pollProgress();
+    
+    // Set up interval polling
+    progressPollingRef.current = setInterval(pollProgress, 1000);
+    
+    // Clear interval after 2 minutes to prevent infinite polling
+    setTimeout(() => {
+      if (progressPollingRef.current) {
+        clearInterval(progressPollingRef.current);
+        progressPollingRef.current = null;
+      }
+      setRagScanningProgress(null);
+    }, 120000);
+  };
 
   const loadModels = async () => {
     try {
@@ -49,9 +203,35 @@ const AdminConsole: React.FC = () => {
     }
   };
 
+  const loadRagScanningResult = async () => {
+    try {
+      const result = await apiService.getLastRagScanningResult();
+      setRagScanningResult(result);
+      
+      // Set notification count based on blocked chunks
+      if (result && result.blocked_chunks > 0) {
+        setRagScanningNotificationCount(result.blocked_chunks);
+      } else {
+        setRagScanningNotificationCount(0);
+      }
+    } catch (error) {
+      // No result available yet, that's okay
+      setRagScanningResult(null);
+      setRagScanningNotificationCount(0);
+    }
+  };
+
+  const clearRagScanningNotification = () => {
+    setRagScanningNotificationCount(0);
+  };
+
   const loadConfig = async () => {
     try {
       const configData = await apiService.getConfig();
+      // Ensure rag_content_scanning has a default value if not present
+      if (configData.rag_content_scanning === undefined) {
+        configData.rag_content_scanning = false;
+      }
       setConfig(configData);
     } catch (error) {
       console.error('Failed to load config:', error);
@@ -63,14 +243,22 @@ const AdminConsole: React.FC = () => {
     if (!config) return;
 
     try {
+      // If Lakera is being disabled, also disable RAG content scanning
+      const lakeraEnabled = updates.lakera_enabled ?? config.lakera_enabled;
+      const ragContentScanning = lakeraEnabled 
+        ? (updates.rag_content_scanning ?? config.rag_content_scanning)
+        : false;
+
       const updatedConfig: AppConfigUpdate = {
         business_name: updates.business_name ?? config.business_name,
         tagline: updates.tagline ?? config.tagline,
         hero_text: updates.hero_text ?? config.hero_text,
         hero_image_url: updates.hero_image_url ?? config.hero_image_url,
         logo_url: updates.logo_url ?? config.logo_url,
-        lakera_enabled: updates.lakera_enabled ?? config.lakera_enabled,
+        lakera_enabled: lakeraEnabled,
         lakera_blocking_mode: updates.lakera_blocking_mode ?? config.lakera_blocking_mode,
+        rag_content_scanning: ragContentScanning,
+        rag_lakera_project_id: updates.rag_lakera_project_id ?? config.rag_lakera_project_id,
         openai_model: updates.openai_model ?? config.openai_model,
         temperature: updates.temperature ?? config.temperature,
         system_prompt: updates.system_prompt ?? config.system_prompt,
@@ -135,11 +323,12 @@ const AdminConsole: React.FC = () => {
     }
   };
 
-  const tabs: { id: TabType; label: string }[] = [
+  const tabs: { id: TabType; label: string; notificationCount?: number }[] = [
     { id: 'setup', label: 'Setup' },
     { id: 'branding', label: 'Branding' },
     { id: 'llm', label: 'LLM' },
     { id: 'rag', label: 'RAG' },
+    { id: 'rag-scanning', label: 'RAG Scanning Report', ...(ragScanningNotificationCount > 0 && { notificationCount: ragScanningNotificationCount }) },
     { id: 'tools', label: 'Tools' },
     { id: 'security', label: 'Security' },
     { id: 'prompts', label: 'Demo Prompts' },
@@ -196,13 +385,20 @@ const AdminConsole: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm relative ${
                   activeTab === tab.id
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                {tab.label}
+                <span className="flex items-center space-x-2">
+                  <span>{tab.label}</span>
+                  {tab.notificationCount !== undefined && tab.notificationCount > 0 && (
+                    <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                      {tab.notificationCount}
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
           </nav>
@@ -467,14 +663,51 @@ const AdminConsole: React.FC = () => {
 
           {activeTab === 'rag' && (
             <div className="space-y-6">
+              {/* RAG Scanning Progress Indicator - Only show on RAG tab */}
+              {ragScanningProgress && ragScanningProgress.isScanning && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-blue-900">
+                        Scanning content for security threats...
+                      </div>
+                      <div className="text-xs text-blue-700 mt-1">
+                        {ragScanningProgress.filename && `File: ${ragScanningProgress.filename}`}
+                      </div>
+                      <div className="mt-2">
+                        <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
+                          <span>Progress</span>
+                          <span>{ragScanningProgress.current} / {ragScanningProgress.total} chunks</span>
+                        </div>
+                        <div className="w-full bg-blue-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${(ragScanningProgress.current / ragScanningProgress.total) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <h2 className="text-lg font-semibold text-gray-900">RAG Configuration</h2>
               <div className="space-y-6">
                 <div>
                   <h3 className="text-md font-medium text-gray-800 mb-4">Upload Documents</h3>
-                  <UploadDropzone onUploadComplete={() => {
-                    setMessage({ type: 'success', text: 'Document uploaded successfully' });
-                    ragManagementRef.current?.refresh();
-                  }} />
+                  <UploadDropzone 
+                    onUploadStart={() => {
+                      // Start progress polling immediately when upload begins
+                      startProgressPolling();
+                    }}
+                    onUploadComplete={() => {
+                      setMessage({ type: 'success', text: 'Document uploaded successfully' });
+                      ragManagementRef.current?.refresh();
+                      // Refresh RAG scanning results after upload
+                      setTimeout(() => loadRagScanningResult(), 1000);
+                    }} 
+                  />
                 </div>
                 <div>
                   <h3 className="text-md font-medium text-gray-800 mb-4">Generate AI Content</h3>
@@ -493,11 +726,184 @@ const AdminConsole: React.FC = () => {
                 <div>
                   <RagManagement 
                     ref={ragManagementRef}
-                    onUploadComplete={() => setMessage({ type: 'success', text: 'Document uploaded successfully' })}
+                    onUploadStart={() => {
+                      // Start progress polling immediately when upload begins
+                      startProgressPolling();
+                    }}
+                    onUploadComplete={() => {
+                      setMessage({ type: 'success', text: 'Document uploaded successfully' });
+                      ragManagementRef.current?.refresh();
+                      // Refresh RAG scanning results after upload
+                      setTimeout(() => loadRagScanningResult(), 1000);
+                    }}
                     onGenerateComplete={() => setMessage({ type: 'success', text: 'Content generated successfully' })}
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'rag-scanning' && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold text-gray-900">RAG Content Scanning Report</h2>
+              
+              {!config.rag_content_scanning ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-yellow-600">⚠️</div>
+                    <div>
+                      <h3 className="text-sm font-medium text-yellow-900">RAG Content Scanning Disabled</h3>
+                      <p className="text-sm text-yellow-800 mt-1">
+                        RAG content scanning is currently disabled. Enable it in the Security tab to scan uploaded documents for malicious content.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : !ragScanningResult ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-blue-600">ℹ️</div>
+                    <div>
+                      <h3 className="text-sm font-medium text-blue-900">No Scanning Results Yet</h3>
+                      <p className="text-sm text-blue-800 mt-1">
+                        Upload a document in the RAG tab to see content scanning results here. Any blocked content will be reported with detailed information.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className={`p-6 rounded-lg border ${
+                  ragScanningResult.blocked_chunks > 0 && ragScanningResult.safe_chunks === 0
+                    ? 'bg-red-50 border-red-200' // All content blocked
+                    : ragScanningResult.blocked_chunks > 0
+                    ? 'bg-yellow-50 border-yellow-200' // Some content blocked
+                    : 'bg-green-50 border-green-200' // All content safe
+                }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <h3 className={`text-lg font-medium ${
+                        ragScanningResult.blocked_chunks > 0 && ragScanningResult.safe_chunks === 0
+                          ? 'text-red-900' // All content blocked
+                          : ragScanningResult.blocked_chunks > 0
+                          ? 'text-yellow-900' // Some content blocked
+                          : 'text-green-900' // All content safe
+                      }`}>
+                        Scanning Results
+                      </h3>
+                      {ragScanningResult.blocked_chunks > 0 && ragScanningResult.safe_chunks === 0 && (
+                        <span className="bg-red-200 text-red-800 text-sm px-3 py-1 rounded-full font-medium">
+                          ALL CONTENT BLOCKED
+                        </span>
+                      )}
+                      {ragScanningResult.blocked_chunks > 0 && ragScanningResult.safe_chunks > 0 && (
+                        <span className="bg-yellow-200 text-yellow-800 text-sm px-3 py-1 rounded-full font-medium">
+                          PARTIAL BLOCK
+                        </span>
+                      )}
+                      {ragScanningResult.blocked_chunks === 0 && (
+                        <span className="bg-green-200 text-green-800 text-sm px-3 py-1 rounded-full font-medium">
+                          ALL CONTENT SAFE
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={loadRagScanningResult}
+                      className={`text-sm px-4 py-2 rounded-lg font-medium ${
+                        ragScanningResult.blocked_chunks > 0 && ragScanningResult.safe_chunks === 0
+                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                          : ragScanningResult.blocked_chunks > 0
+                          ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                          : 'bg-green-100 text-green-700 hover:bg-green-200'
+                      }`}
+                    >
+                      Refresh Results
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-white p-4 rounded-lg border">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-green-600 text-lg">✅</span>
+                          <div>
+                            <div className="text-2xl font-bold text-green-600">{ragScanningResult.safe_chunks}</div>
+                            <div className="text-sm text-gray-600">Safe Chunks</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white p-4 rounded-lg border">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-red-600 text-lg">🚫</span>
+                          <div>
+                            <div className="text-2xl font-bold text-red-600">{ragScanningResult.blocked_chunks}</div>
+                            <div className="text-sm text-gray-600">Blocked Chunks</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white p-4 rounded-lg border">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-blue-600 text-lg">📄</span>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 truncate">{ragScanningResult.filename}</div>
+                            <div className="text-sm text-gray-600">Scanned File</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {ragScanningResult.blocked_chunks > 0 && ragScanningResult.safe_chunks === 0 && (
+                      <div className="p-4 bg-red-100 border border-red-300 rounded-lg">
+                        <div className="flex items-start space-x-3">
+                          <span className="text-red-600 text-lg">⚠️</span>
+                          <div>
+                            <h4 className="font-medium text-red-900">Security Alert</h4>
+                            <p className="text-sm text-red-800 mt-1">
+                              All content in this file was blocked by security scanning. No content was added to the RAG database. 
+                              Check the detailed results below for specific reasons why each chunk was blocked.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {ragScanningResult.results && ragScanningResult.results.length > 0 && (
+                      <div className="space-y-3">
+                        <h4 className="text-md font-medium text-gray-900">Detailed Chunk Analysis</h4>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {ragScanningResult.results.map((result: any, index: number) => (
+                            <div key={index} className={`p-4 rounded-lg border ${
+                              result.is_safe 
+                                ? 'bg-green-50 border-green-200' 
+                                : 'bg-red-50 border-red-200'
+                            }`}>
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-medium text-gray-900">Chunk {result.chunk_index}</span>
+                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                    result.is_safe 
+                                      ? 'bg-green-200 text-green-800' 
+                                      : 'bg-red-200 text-red-800'
+                                  }`}>
+                                    {result.is_safe ? '✅ Safe' : '🚫 Blocked'}
+                                  </span>
+                                </div>
+                                {!result.is_safe && result.reason && (
+                                  <span className="text-xs text-red-600 font-medium">
+                                    Reason: {result.reason}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-700 bg-white p-3 rounded border">
+                                {result.chunk_text}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -514,55 +920,112 @@ const AdminConsole: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-3">
-                      <button
-                        type="button"
-                        onClick={() => handleConfigUpdate({ lakera_enabled: !config.lakera_enabled })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
-                          config.lakera_enabled ? 'bg-primary-600' : 'bg-gray-200'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            config.lakera_enabled ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                      <label className="text-sm font-medium text-gray-700">
-                        Enable Lakera Guard
-                      </label>
-                    </div>
-                    
-                    {config.lakera_enabled && (
+                    <div className="space-y-4">
                       <div className="flex items-center space-x-3">
                         <button
                           type="button"
-                          onClick={() => handleConfigUpdate({ lakera_blocking_mode: !config.lakera_blocking_mode })}
+                          onClick={() => handleConfigUpdate({ lakera_enabled: !config.lakera_enabled })}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
-                            config.lakera_blocking_mode ? 'bg-red-600' : 'bg-gray-200'
+                            config.lakera_enabled ? 'bg-primary-600' : 'bg-gray-200'
                           }`}
                         >
                           <span
                             className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              config.lakera_blocking_mode ? 'translate-x-6' : 'translate-x-1'
+                              config.lakera_enabled ? 'translate-x-6' : 'translate-x-1'
                             }`}
                           />
                         </button>
                         <label className="text-sm font-medium text-gray-700">
-                          Blocking Mode
+                          Enable Lakera Guard
                         </label>
                       </div>
-                    )}
+                      
+                      {config.lakera_enabled && (
+                        <div className="ml-8 p-4 bg-gray-50 rounded-lg border">
+                          <h4 className="text-sm font-medium text-gray-700 mb-3">Security Options</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Blocking Mode Toggle */}
+                            <div className="flex items-center space-x-3">
+                              <button
+                                type="button"
+                                onClick={() => handleConfigUpdate({ lakera_blocking_mode: !config.lakera_blocking_mode })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                                  config.lakera_blocking_mode ? 'bg-red-600' : 'bg-gray-200'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    config.lakera_blocking_mode ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                              <div>
+                                <label className="text-sm font-medium text-gray-700">
+                                  Blocking Mode
+                                </label>
+                                <p className="text-xs text-gray-500">
+                                  Block flagged content instead of just logging
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* RAG Content Scanning Toggle */}
+                            <div className="flex items-center space-x-3">
+                              <button
+                                type="button"
+                                onClick={() => handleConfigUpdate({ rag_content_scanning: !config.rag_content_scanning })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                                  config.rag_content_scanning ? 'bg-primary-600' : 'bg-gray-200'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    config.rag_content_scanning ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                              <div>
+                                <label className="text-sm font-medium text-gray-700">
+                                  RAG Content Scanning
+                                </label>
+                                <p className="text-xs text-gray-500">
+                                  Scan document chunks during ingestion
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {config.rag_content_scanning && (
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            RAG Scanning Project ID
+                          </label>
+                          <input
+                            type="text"
+                            value={config.rag_lakera_project_id || ''}
+                            onChange={(e) => handleConfigUpdate({ rag_lakera_project_id: e.target.value })}
+                            placeholder="project-8541012967"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          <p className="text-xs text-gray-500">
+                            Separate project ID for RAG content scanning to keep it isolated from chat interface scanning.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   {config.lakera_enabled && (
                     <div className="text-xs text-gray-500 max-w-xs">
                       {config.lakera_blocking_mode 
-                        ? "🚫 Block flagged content and show security message" 
-                        : "📝 Log flagged content but allow through"}
+                        ? "🚫 Blocking mode enabled - flagged content will be blocked" 
+                        : "📝 Logging mode - flagged content will be logged but allowed"}
                     </div>
                   )}
                 </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     OpenAI API Key
