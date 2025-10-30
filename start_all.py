@@ -76,12 +76,24 @@ def start_backend():
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from backend.main import app
         import uvicorn
+        import logging
         
+        # Configure logging to avoid blocking I/O issues
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
+        
+        # Disable uvicorn access logging to reduce stdout contention
         uvicorn.run(
             app,
             host="0.0.0.0",
             port=8000,
-            log_level="info"
+            log_level="info",
+            access_log=False  # Disable access logging to prevent blocking I/O
         )
     except KeyboardInterrupt:
         print("\n🛑 Backend server stopped")

@@ -12,6 +12,7 @@ interface RagSource {
 }
 
 interface RagManagementProps {
+  onUploadStart?: () => void;
   onUploadComplete?: () => void;
   onGenerateComplete?: () => void;
 }
@@ -21,6 +22,7 @@ export interface RagManagementRef {
 }
 
 const RagManagement = forwardRef<RagManagementRef, RagManagementProps>(({ 
+  onUploadStart,
   onUploadComplete, 
   onGenerateComplete 
 }, ref) => {

@@ -8,6 +8,8 @@ export interface AppConfig {
   logo_url?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
+  rag_content_scanning: boolean;
+  rag_lakera_project_id?: string;
   lakera_project_id?: string;
   openai_model: string;
   temperature: number;
@@ -26,6 +28,8 @@ export interface AppConfigUpdate {
   logo_url?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
+  rag_content_scanning: boolean;
+  rag_lakera_project_id?: string;
   openai_model: string;
   temperature: number;
   system_prompt?: string;

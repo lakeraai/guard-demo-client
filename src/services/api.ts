@@ -153,6 +153,14 @@ class ApiService {
     return this.request<LakeraResult>('/lakera/last');
   }
 
+  async getLastRagScanningResult(): Promise<any> {
+    return this.request<any>('/rag/scanning/last');
+  }
+
+  async getRagScanningProgress(): Promise<any> {
+    return this.request<any>('/rag/scanning/progress');
+  }
+
   // Demo Prompt endpoints
   async getDemoPrompts(category?: string, limit: number = 50): Promise<DemoPrompt[]> {
     const params = new URLSearchParams();

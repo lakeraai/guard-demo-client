@@ -8,7 +8,18 @@ import shutil
 import json
 import zipfile
 import io
+import logging
+import sys
 from datetime import datetime
+
+# Configure logging to prevent blocking I/O issues
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 from .database import get_db, engine
 from .models import Base, AppConfig, Tool, RagSource, MCPToolCapabilities, DemoPrompt
@@ -827,6 +838,22 @@ async def get_last_lakera_result():
     if result is None:
         raise HTTPException(status_code=404, detail="No Lakera result available")
     return result
+
+@app.get("/api/rag/scanning/last")
+async def get_last_rag_scanning_result():
+    """Get the last RAG content scanning result"""
+    result = rag.get_last_rag_scanning_result()
+    if result is None:
+        raise HTTPException(status_code=404, detail="No RAG scanning result available")
+    return result
+
+@app.get("/api/rag/scanning/progress")
+async def get_rag_scanning_progress():
+    """Get the current RAG scanning progress"""
+    progress = rag.get_rag_scanning_progress()
+    if progress is None:
+        raise HTTPException(status_code=404, detail="No RAG scanning in progress")
+    return progress
 
 @app.get("/api/models")
 async def get_available_models():

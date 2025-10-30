@@ -11,6 +11,8 @@ class AppConfigBase(BaseModel):
     logo_url: Optional[str] = None
     lakera_enabled: bool = True
     lakera_blocking_mode: bool = False
+    rag_content_scanning: bool = False
+    rag_lakera_project_id: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
     temperature: int = 7
     system_prompt: Optional[str] = None
@@ -20,6 +22,7 @@ class AppConfigResponse(AppConfigBase):
     openai_api_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
+    rag_lakera_project_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -27,6 +30,7 @@ class AppConfigUpdate(AppConfigBase):
     openai_api_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
+    rag_lakera_project_id: Optional[str] = None
 
 # Chat schemas
 class ChatRequest(BaseModel):

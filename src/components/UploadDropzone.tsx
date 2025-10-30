@@ -12,10 +12,11 @@ interface UploadedFile {
 }
 
 interface UploadDropzoneProps {
+  onUploadStart?: () => void;
   onUploadComplete?: () => void;
 }
 
-const UploadDropzone: React.FC<UploadDropzoneProps> = ({ onUploadComplete }) => {
+const UploadDropzone: React.FC<UploadDropzoneProps> = ({ onUploadStart, onUploadComplete }) => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -28,21 +29,40 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({ onUploadComplete }) => 
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
 
+    // Notify that upload has started
+    onUploadStart?.();
+
     // Upload each file
     for (const file of acceptedFiles) {
       const fileId = newFiles.find(f => f.name === file.name)?.id;
       if (!fileId) continue;
 
       try {
-        await apiService.uploadFile(file);
+        const response = await apiService.uploadFile(file);
         
-        setUploadedFiles(prev => 
-          prev.map(f => 
-            f.id === fileId 
-              ? { ...f, status: 'success' as const }
-              : f
-          )
-        );
+        // Check if content was actually ingested or blocked
+        const chunks = response.result?.chunks || 0;
+        const blockedChunks = response.result?.blocked_chunks || 0;
+        
+        if (chunks === 0 && blockedChunks > 0) {
+          // All chunks were blocked by security scanning
+          setUploadedFiles(prev => 
+            prev.map(f => 
+              f.id === fileId 
+                ? { ...f, status: 'error' as const, error: `Content blocked by security scanning (${blockedChunks} chunks blocked)` }
+                : f
+            )
+          );
+        } else {
+          // Content was successfully ingested
+          setUploadedFiles(prev => 
+            prev.map(f => 
+              f.id === fileId 
+                ? { ...f, status: 'success' as const }
+                : f
+            )
+          );
+        }
         
         onUploadComplete?.();
       } catch (error) {
