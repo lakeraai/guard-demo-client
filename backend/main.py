@@ -839,6 +839,14 @@ async def get_last_lakera_result():
         raise HTTPException(status_code=404, detail="No Lakera result available")
     return result
 
+@app.get("/api/lakera/last_request")
+async def get_last_lakera_request():
+    """Get the last Lakera request payload for debugging (messages + metadata)"""
+    req = lakera.get_last_request()
+    if req is None:
+        raise HTTPException(status_code=404, detail="No Lakera request recorded yet")
+    return req
+
 @app.get("/api/rag/scanning/last")
 async def get_last_rag_scanning_result():
     """Get the last RAG content scanning result"""

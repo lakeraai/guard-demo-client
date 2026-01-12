@@ -2,7 +2,7 @@ from typing import Dict, Any, List, Optional
 import json
 from sqlalchemy.orm import Session
 from .database import get_db
-from .models import Tool, MCPToolCapabilities
+from .models import Tool, MCPToolCapabilities, AppConfig
 from . import lakera
 
 async def enabled_tools(db: Session) -> List[Dict[str, Any]]:
@@ -550,12 +550,21 @@ async def moderate_tool_response(tool_name: str, tool_content: str, lakera_api_k
             {"role": "tool", "content": tool_content}
         ]
         
+        # Get system prompt from app config (if any)
+        try:
+            db = next(get_db())
+            cfg = db.query(AppConfig).first()
+            sys_prompt = cfg.system_prompt if cfg else None
+        except Exception:
+            sys_prompt = None
+
         # Check with Lakera
         lakera_status = await lakera.check_interaction(
             messages=messages,
             meta={"tool_name": tool_name, "content_type": "tool_response"},
             api_key=lakera_api_key,
-            project_id=lakera_project_id
+            project_id=lakera_project_id,
+            system_prompt=sys_prompt
         )
         
         return lakera_status
