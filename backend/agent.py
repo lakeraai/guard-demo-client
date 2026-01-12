@@ -34,7 +34,8 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
             messages=lakera_messages,
             meta={"session_id": req.session_id} if req.session_id else None,
             api_key=lakera_api_key,
-            project_id=lakera_project_id
+            project_id=lakera_project_id,
+            system_prompt=cfg.system_prompt
         )
         
         if lakera_result and lakera_result.get("flagged"):
@@ -191,7 +192,8 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
                 messages=lakera_messages,
                 meta={"session_id": req.session_id} if req.session_id else None,
                 api_key=cfg.lakera_api_key,
-                project_id=cfg.lakera_project_id
+                project_id=cfg.lakera_project_id,
+                system_prompt=cfg.system_prompt
             )
             
             if lakera_status and lakera_status.get("flagged"):

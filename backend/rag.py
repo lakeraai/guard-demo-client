@@ -448,7 +448,8 @@ async def scan_chunk_content(chunk_text: str, config: AppConfig) -> Tuple[bool, 
         result = await check_interaction(
             messages=messages,
             api_key=config.lakera_api_key,
-            project_id=project_id
+            project_id=project_id,
+            system_prompt=config.system_prompt
         )
         print(f"🔍 Lakera result: {result}")
         
