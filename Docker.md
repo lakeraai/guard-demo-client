@@ -1,16 +1,16 @@
 # Instructions on how to Run and/or Build your own Docker Container
 
-##To Build the Docker Container:
+## To Build the Docker Container:
 
 docker build . guard-demo --no-cache
 
-##To Run the Container:
+## To Run the Container:
 
 docker run -it -p 3000:3000 guard-demo
 
 
 
-##If you wish to use the pre-build container:
+## Use the pre-build DockerHub container:
 
 
 docker run -it -p 3000:3000 vmummer/guard-demo
