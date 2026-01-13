@@ -104,7 +104,8 @@ def start_frontend():
     """Start the frontend development server."""
     print("🚀 Starting frontend server...")
     try:
-        subprocess.run(["npm", "run", "dev"], check=True)
+        subprocess.run(["npm", "run", "dev","--", "--host", "0.0.0.0"], check=True)
+       # subprocess.run(["npm", "run", "dev", ], check=True)
     except KeyboardInterrupt:
         print("\n🛑 Frontend server stopped")
     except subprocess.CalledProcessError as e:
