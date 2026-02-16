@@ -1,0 +1,9 @@
+# LiteLLM Proxy config – no API keys or models in file; add those via UI (http://localhost:4000/ui).
+# Edit database_url below if your Postgres is elsewhere. UI login: set UI_USERNAME and UI_PASSWORD in .env.
+# See: https://docs.litellm.ai/docs/proxy/config_settings and https://docs.litellm.ai/docs/proxy/ui
+
+general_settings:
+  master_key: sk-demo-master-key
+  database_url: postgresql://litellm:litellm@localhost:5433/litellm
+
+model_list: []
