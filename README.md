@@ -101,12 +101,32 @@ python start_backend.py
 npm run dev
 ```
 
+**Terminal 3 - LiteLLM (optional):**
+
+LiteLLM runs as a separate proxy for virtual keys and model management. Default config uses `postgresql://litellm:litellm@localhost:5433/litellm` and UI login `admin` / `demo` (from `.env`).
+
+1. **One-time setup** (from project root, with venv activated). This creates `.env` from `.env.example` if needed and generates the LiteLLM Prisma client:
+   ```bash
+   cp .env.example .env
+   ./scripts/setup_litellm.sh
+   ```
+
+2. **If your Postgres or UI credentials differ:** edit `litellm/config.yaml` (e.g. `general_settings.database_url`) and `.env` (`UI_USERNAME`, `UI_PASSWORD`).
+
+3. **Start the LiteLLM proxy** in Terminal 3:
+   ```bash
+   litellm --config litellm/config.yaml
+   ```
+
+4. Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and mint keys there. Master key for API: `sk-demo-master-key` (or set `LITELLM_MASTER_KEY` in `.env`).
+
 ## 🌐 Access Points
 
 - **Demo Page**: http://localhost:3000
 - **Admin Console**: http://localhost:3000/admin
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs (if available)
+- **LiteLLM Proxy** (optional): http://localhost:4000 — **LiteLLM UI**: http://localhost:4000/ui
 
 ## ⚙️ Configuration
 
