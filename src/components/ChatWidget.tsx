@@ -21,7 +21,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ onLakeraToggle, forceExpanded, 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [promptIdForNextSend, setPromptIdForNextSend] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Handle external control of expanded state
   useEffect(() => {
@@ -42,6 +42,22 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ onLakeraToggle, forceExpanded, 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Sync textarea height whenever inputMessage changes (typing or e.g. selecting a saved prompt)
+  const LINE_HEIGHT_PX = 20;
+  const MAX_LINES = 4;
+  const MAX_HEIGHT_PX = LINE_HEIGHT_PX * MAX_LINES;
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const newHeight = Math.min(el.scrollHeight, MAX_HEIGHT_PX);
+    el.style.height = `${newHeight}px`;
+    if (el.scrollHeight > MAX_HEIGHT_PX) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [inputMessage]);
 
   // Initialize Lakera result on mount
   useEffect(() => {
@@ -95,11 +111,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ onLakeraToggle, forceExpanded, 
     }
   };
 
-  // Handle input change with autocomplete
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setInputMessage(value);
-    searchSuggestions(value);
+  // Handle input change with autocomplete (textarea resize is handled by useEffect on inputMessage)
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputMessage(e.target.value);
+    searchSuggestions(e.target.value);
   };
 
   const handleSendMessage = async () => {
@@ -282,16 +297,16 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ onLakeraToggle, forceExpanded, 
             <div className="relative">
               <div className="flex space-x-2">
                 <div className="flex-1 relative">
-                  <input
+                  <textarea
                     ref={inputRef}
-                    type="text"
                     value={inputMessage}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyPress}
                     placeholder="Type your message..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none max-h-24 overflow-y-auto"
                     disabled={isLoading}
                     autoFocus
+                    rows={1}
                   />
                   
                   {/* Autocomplete suggestion overlay */}
