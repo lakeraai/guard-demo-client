@@ -1,0 +1,121 @@
+transaction_id,date,customer_id,customer_name,email,type,amount,currency,merchant,category,description,masked_account,post_balance
+ec3f50c7-273e-498f-8093-911061c9e126,2025-02-12,1002,Jordan Johnson,jordan.johnson@test.example,credit,177.3,CAD,Toronto Transit,Transport,Toronto Transit - Transport,****7232,11291.21
+9fc2d6e3-031b-43c2-a16c-e075ed470c44,2025-02-16,1002,Jordan Johnson,jordan.johnson@test.example,debit,111.17,CAD,Tim Hortons,Food & Drink,Tim Hortons - Food & Drink,****7745,11180.04
+964e4a46-e05c-42d8-be93-23c3dad32237,2025-07-23,1003,Sam Garcia,sam.garcia@example.com,debit,113.77,CAD,Costco,Retail,Costco - Retail,****9486,9066.78
+edc57756-d8f6-4af8-9494-969e288f4988,2025-09-15,1003,Sam Garcia,sam.garcia@example.com,credit,1077.91,CAD,Stripe,Income,Stripe - Income,****6038,10144.69
+c8263ab5-b212-4517-ba89-2a6db8694420,2024-11-23,1004,Shawn Jackson,shawn.jackson@example.com,credit,1327.93,CAD,Stripe,Income,Stripe - Income,****9565,4090.2
+02a0ac04-3e48-4d2f-ae9b-d6036e3c4372,2025-04-30,1004,Shawn Jackson,shawn.jackson@example.com,debit,236.07,CAD,Pharmacy,Healthcare,Pharmacy - Healthcare,****1916,3854.13
+8e574b08-82a3-4904-a711-a8bdc6ab5a56,2025-05-21,1004,Shawn Jackson,shawn.jackson@example.com,credit,258.59,CAD,Amazon,Online Shopping,Amazon - Online Shopping,****4899,4112.72
+389dc005-e9b5-4b83-84f5-718188df1d7d,2025-09-11,1005,Jamie Martin,jamie.martin@example.com,debit,171.08,CAD,LCBO,Alcohol,LCBO - Alcohol,****9808,2590.84
+5ad5a226-1b76-48de-94cc-6fac3f7be44a,2024-10-04,1007,Jordan Johnson,jordan.johnson@example.com,credit,1238.72,CAD,Scotiabank,Transfer,Scotiabank - Transfer,****9977,14298.27
+6775bc35-2321-427e-b808-d7d09fbdc038,2024-11-21,1007,Jordan Johnson,jordan.johnson@example.com,debit,161.66,CAD,Netflix,Entertainment,Netflix - Entertainment,****1653,14136.61
+09e96e32-1855-450b-a59c-2953a5cedfc2,2025-04-09,1007,Jordan Johnson,jordan.johnson@example.com,debit,558.04,CAD,Walmart,Groceries,Walmart - Groceries,****7149,13578.57
+4d7a0fc2-dde2-483d-be99-287d6a2ef633,2025-05-13,1007,Jordan Johnson,jordan.johnson@example.com,debit,231.7,CAD,Beer Store,Alcohol,Beer Store - Alcohol,****4185,13346.87
+270efa01-d96d-48b3-8d2a-b5bc77ec744e,2025-03-27,1008,Taylor Johnson,taylor.johnson@demo.example,debit,41.03,CAD,Tim Hortons,Food & Drink,Tim Hortons - Food & Drink,****6813,9175.14
+df612484-b7cf-42b3-8bbb-560dff9b27f3,2025-01-16,1009,Reese Jackson,reese.jackson@demo.example,debit,516.35,CAD,Netflix,Entertainment,Netflix - Entertainment,****6419,10250.7
+c7c97eac-d08b-4d40-b0ac-af40d2321246,2025-03-19,1011,Avery Williams,avery.williams@example.com,debit,627.11,CAD,TD Bank,Transfer,TD Bank - Transfer,****4155,13936.58
+10b1c2fe-3179-4c1b-bdcd-f107c89d1249,2025-05-12,1011,Avery Williams,avery.williams@example.com,debit,75.7,CAD,Esso,Fuel,Esso - Fuel,****8758,13860.88
+f1b06521-83e9-4b51-adc7-f218047bb20d,2024-09-18,1014,Casey Garcia,casey.garcia@example.com,debit,278.04,CAD,Uber,Transport,Uber - Transport,****4228,2858.42
+db59a9a7-81ab-4c1c-8337-95b06d7d8d77,2024-09-23,1014,Casey Garcia,casey.garcia@example.com,debit,50.87,CAD,Uber,Transport,Uber - Transport,****6514,2807.55
+f488ef3c-4cb2-4753-8f4f-e940a8621054,2024-12-14,1015,Jamie Thomas,jamie.thomas@test.example,debit,1603.74,CAD,Scotiabank,Transfer,Scotiabank - Transfer,****8999,1555.63
+4a0d77c9-e7ab-45d3-99db-97bab502bfea,2024-09-27,1017,Morgan Davis,morgan.davis@demo.example,debit,49.68,CAD,Esso,Fuel,Esso - Fuel,****7118,8059.29
+5860d441-c323-4f8e-a068-bdd744b30d35,2025-05-06,1018,Jordan Moore,jordan.moore@demo.example,debit,719.42,CAD,Air Canada,Travel,Air Canada - Travel,****1166,6043.78
+d2e8944d-279c-4dec-95c2-cae9689f68d2,2025-02-28,1020,Parker Jones,parker.jones@test.example,credit,320.5,CAD,Rogers,Utilities,Rogers - Utilities,****8973,9692.37
+bfd9c333-08f7-4bf0-bf63-cb353b59a8cc,2025-08-14,1020,Parker Jones,parker.jones@test.example,debit,165.07,CAD,Uber,Transport,Uber - Transport,****4388,9527.3
+46ea835d-c6dc-4945-bd60-d6f97f07284d,2025-03-04,1021,Reese Jackson,reese.jackson@example.com,debit,58.07,CAD,Uber Eats,Food & Drink,Uber Eats - Food & Drink,****8541,2464.59
+efe4c23f-9933-4223-a23b-d6becd860ad4,2025-01-21,1023,Riley Thompson,riley.thompson@test.example,debit,1126.67,CAD,Interac e-Transfer,Transfer,Interac e-Transfer - Transfer,****8251,4685.58
+659417f2-c2e2-45c5-acab-0620c875b452,2025-02-23,1024,Sam Thomas,sam.thomas@test.example,debit,92.61,CAD,Air Canada,Travel,Air Canada - Travel,****6753,7020.4
+549bc21c-877a-468a-b2c6-78eb6f2b4069,2025-04-27,1024,Sam Thomas,sam.thomas@test.example,debit,93.22,CAD,Starbucks,Food & Drink,Starbucks - Food & Drink,****5291,6927.18
+492adbd3-f48f-422b-b653-5bc864ab555d,2024-11-10,1025,Jordan Rodriguez,jordan.rodriguez@demo.example,debit,26.82,CAD,Esso,Fuel,Esso - Fuel,****5325,11858.23
+434b673c-0c3f-4c65-9d07-16f9cfaee5de,2025-03-10,1025,Jordan Rodriguez,jordan.rodriguez@demo.example,debit,338.49,CAD,Hydro One,Utilities,Hydro One - Utilities,****9666,11519.74
+21f9c9ea-33ee-4d6b-8131-134085d4e65c,2024-12-30,1027,Taylor Lee,taylor.lee@test.example,credit,4398.3,CAD,Payroll,Income,Payroll - Income,****2729,12354.7
+1f2e145e-5826-48f0-a8e6-8fd0e252ca81,2025-02-13,1027,Taylor Lee,taylor.lee@test.example,debit,132.93,CAD,Bell Canada,Utilities,Bell Canada - Utilities,****3615,12221.77
+fb860e60-59d0-43a6-a8a5-5ecc7d5c5bfb,2025-03-20,1027,Taylor Lee,taylor.lee@test.example,debit,352.39,CAD,Hydro One,Utilities,Hydro One - Utilities,****4164,11869.38
+f0c0e1c5-6273-4ff5-904f-cbb48c72e8b6,2025-05-21,1027,Taylor Lee,taylor.lee@test.example,debit,196.12,CAD,Home Depot,Home Improvement,Home Depot - Home Improvement,****4456,11673.26
+8b5b7cd9-418f-438a-b926-b4b634d7fa10,2025-04-07,1029,Elliot Garcia,elliot.garcia@test.example,debit,277.8,CAD,Pharmacy,Healthcare,Pharmacy - Healthcare,****5351,895.73
+ff7a8927-1eb0-4afd-994c-3069017cbf89,2025-05-09,1030,Morgan Johnson,morgan.johnson@example.com,debit,21.44,CAD,Home Depot,Home Improvement,Home Depot - Home Improvement,****6733,9287.96
+4a1f3b2e-ebc9-436f-ab88-cd6ab67c728d,2024-12-07,1031,Jamie Martin,jamie.martin@test.example,debit,258.85,CAD,Hydro One,Utilities,Hydro One - Utilities,****4150,2713.75
+c8a4fd68-8617-4c58-9585-432edbda66cb,2025-01-21,1031,Jamie Martin,jamie.martin@test.example,debit,110.34,CAD,Starbucks,Food & Drink,Starbucks - Food & Drink,****3184,2603.41
+216d6308-e02a-4b7f-8b3c-f846746d2a42,2025-08-27,1031,Jamie Martin,jamie.martin@test.example,debit,213.96,CAD,Walmart,Groceries,Walmart - Groceries,****8149,2389.45
+d199f024-162e-4f1f-b831-af5ea571ff1c,2025-02-06,1032,Reese Jackson,reese.jackson@example.com,debit,359.88,CAD,Clinic,Healthcare,Clinic - Healthcare,****3506,1083.37
+d44961f2-8ca9-4c7b-8ce9-78fcfcb14aaf,2024-09-24,1033,Cameron Thompson,cameron.thompson@demo.example,debit,76.98,CAD,Toronto Transit,Transport,Toronto Transit - Transport,****1090,14181.86
+76db4b29-ac27-47fa-a336-308c13c50812,2024-10-23,1033,Cameron Thompson,cameron.thompson@demo.example,debit,172.27,CAD,Walmart,Groceries,Walmart - Groceries,****2679,14009.59
+3971b6fb-e27f-4a4a-abca-ddb71209792c,2025-06-27,1033,Cameron Thompson,cameron.thompson@demo.example,credit,12.37,CAD,Starbucks,Food & Drink,Starbucks - Food & Drink,****2113,14021.96
+049ff931-98a2-4b8a-8291-c629b027cad3,2024-11-08,1034,Morgan Martin,morgan.martin@test.example,credit,3916.51,CAD,Payroll,Income,Payroll - Income,****7216,18418.17
+e56d23f6-112a-481a-bdbd-39fb0c6b4344,2024-11-30,1034,Morgan Martin,morgan.martin@test.example,debit,324.32,CAD,IKEA,Retail,IKEA - Retail,****2129,18093.85
+ab19e28c-7034-4586-947a-7e03b5ce09c1,2025-01-12,1034,Morgan Martin,morgan.martin@test.example,credit,108.59,CAD,Esso,Fuel,Esso - Fuel,****1035,18202.44
+e18d7b4e-fd55-4aab-af43-c2b544b56cd9,2025-01-14,1034,Morgan Martin,morgan.martin@test.example,credit,37.94,CAD,Tim Hortons,Food & Drink,Tim Hortons - Food & Drink,****7865,18240.38
+21a455bd-9bfa-4b00-a3aa-ab9a6778c8d0,2025-06-22,1034,Morgan Martin,morgan.martin@test.example,credit,3991.7,CAD,Stripe,Income,Stripe - Income,****3683,22232.08
+01850219-1f8a-4e0e-803e-60b6251a0c93,2025-07-30,1034,Morgan Martin,morgan.martin@test.example,debit,73.44,CAD,Esso,Fuel,Esso - Fuel,****9928,22158.64
+ee0072c7-6466-4691-bc79-1910909439fb,2024-10-24,1035,Blake Jackson,blake.jackson@demo.example,debit,222.88,CAD,Rogers,Utilities,Rogers - Utilities,****5499,11998.88
+283dc08a-faa0-45a9-a522-5454c43a798f,2025-09-05,1035,Blake Jackson,blake.jackson@demo.example,credit,493.96,CAD,Spotify,Entertainment,Spotify - Entertainment,****1964,12492.84
+52783c36-34a0-462d-aa30-8705124d5191,2024-09-27,1043,Cameron Brown,cameron.brown@test.example,debit,149.79,CAD,Beer Store,Alcohol,Beer Store - Alcohol,****2524,13535.36
+222c964a-e5cc-45e3-a8b0-dec95f491c00,2024-12-25,1043,Cameron Brown,cameron.brown@test.example,debit,119.3,CAD,Clinic,Healthcare,Clinic - Healthcare,****4937,13416.06
+46720b31-f4c4-4d39-b6e6-9e59411ae86d,2025-01-20,1043,Cameron Brown,cameron.brown@test.example,debit,68.04,CAD,LCBO,Alcohol,LCBO - Alcohol,****3780,13348.02
+baa0e387-281c-4614-9acb-aab917912f7f,2024-11-09,1044,Quinn Anderson,quinn.anderson@example.com,debit,1080.41,CAD,Cineplex,Entertainment,Cineplex - Entertainment,****1727,3171.9
+66ac8095-fbc7-439e-a155-8603a55d5157,2025-03-27,1044,Quinn Anderson,quinn.anderson@example.com,credit,174.17,CAD,Costco,Retail,Costco - Retail,****7906,3346.07
+ba62c6b1-b1cd-42e2-9cfc-c23a08e4cb0f,2025-06-23,1044,Quinn Anderson,quinn.anderson@example.com,debit,85.3,CAD,Home Depot,Home Improvement,Home Depot - Home Improvement,****1441,3260.77
+7fed7919-a0cd-4924-9d35-98177a83e6ba,2024-09-20,1045,Devin Brown,devin.brown@demo.example,debit,72.23,CAD,Amazon,Online Shopping,Amazon - Online Shopping,****2307,10034.34
+1ca4a3d0-bb4f-431c-bdde-56e7aef583a0,2025-07-25,1045,Devin Brown,devin.brown@demo.example,debit,1703.58,CAD,TD Bank,Transfer,TD Bank - Transfer,****2983,8330.76
+965584e3-e328-4799-9180-45374153c180,2024-10-08,1046,Avery Martinez,avery.martinez@test.example,debit,32.04,CAD,Uber Eats,Food & Drink,Uber Eats - Food & Drink,****2771,4987.77
+607cb9dc-a21b-4e35-bf3f-7203be4ab53d,2024-11-29,1046,Avery Martinez,avery.martinez@test.example,debit,27.88,CAD,DoorDash,Food & Drink,DoorDash - Food & Drink,****8517,4959.89
+311e1724-03b3-40ba-a560-ea427df8fb7a,2024-10-22,1048,Cameron Lee,cameron.lee@demo.example,debit,1177.57,CAD,Cineplex,Entertainment,Cineplex - Entertainment,****1452,7249.73
+3af59f17-475e-46e3-8f88-3862cf41ff14,2025-03-13,1048,Cameron Lee,cameron.lee@demo.example,debit,200.95,CAD,Uber,Transport,Uber - Transport,****6143,7048.78
+4a6365be-48dc-43de-b7d2-e23bca606b50,2025-04-01,1048,Cameron Lee,cameron.lee@demo.example,debit,168.55,CAD,Toronto Transit,Transport,Toronto Transit - Transport,****7211,6880.23
+5354e88a-b87d-4e2c-8935-dbce190873e4,2025-05-18,1048,Cameron Lee,cameron.lee@demo.example,debit,1616.99,CAD,Interac e-Transfer,Transfer,Interac e-Transfer - Transfer,****1757,5263.24
+e52965aa-d049-4e08-83ba-509dd9b8dda9,2025-07-18,1048,Cameron Lee,cameron.lee@demo.example,credit,23.89,CAD,DoorDash,Food & Drink,DoorDash - Food & Drink,****5349,5287.13
+31deaed2-beca-46e1-ae9b-0b9bbcdefbc5,2025-01-22,1050,Shawn Brown,shawn.brown@demo.example,debit,47.36,CAD,Shell,Fuel,Shell - Fuel,****6355,14511.62
+7fe2512a-6ae2-4aee-bc01-a1170927e1e2,2025-04-07,1051,Quinn Martin,quinn.martin@test.example,debit,571.02,CAD,Walmart,Groceries,Walmart - Groceries,****4138,11168.41
+1051bfac-8279-4efa-a309-c7c6a3cd5e54,2025-05-29,1051,Quinn Martin,quinn.martin@test.example,debit,1120.58,CAD,Cineplex,Entertainment,Cineplex - Entertainment,****5002,10047.83
+84c0ab31-c349-48e4-8a98-0a454fd41a4a,2024-12-30,1052,Taylor Garcia,taylor.garcia@demo.example,debit,261.36,CAD,Pharmacy,Healthcare,Pharmacy - Healthcare,****9317,13861.37
+40814e7e-2e9e-4874-b67b-76bce970498d,2025-01-11,1052,Taylor Garcia,taylor.garcia@demo.example,debit,220.65,CAD,LCBO,Alcohol,LCBO - Alcohol,****5022,13640.72
+50dfb39f-7432-4a66-844e-1cfc0091b95e,2025-05-02,1052,Taylor Garcia,taylor.garcia@demo.example,debit,75.82,CAD,Costco,Retail,Costco - Retail,****8433,13564.9
+9d0eddeb-ad7b-4168-82f3-70ad39a205d6,2024-11-08,1053,Jordan Miller,jordan.miller@test.example,debit,92.21,CAD,Esso,Fuel,Esso - Fuel,****9689,13382.79
+2bc0d96a-940a-42d3-8a37-36eed65a42f5,2024-11-14,1053,Jordan Miller,jordan.miller@test.example,debit,180.79,CAD,Amazon,Online Shopping,Amazon - Online Shopping,****5119,13202.0
+9893d9dd-4c9f-490a-8a82-de19c94c33b1,2025-03-18,1054,Sam Thomas,sam.thomas@demo.example,debit,259.83,CAD,Uber,Transport,Uber - Transport,****2612,8909.72
+5f361d72-a8d0-4e31-8e4d-980c19660b7b,2025-05-24,1055,Shawn Martin,shawn.martin@test.example,credit,4829.14,CAD,Payroll,Income,Payroll - Income,****1508,18696.32
+8e014211-000d-4109-b982-3de3636f15e7,2025-02-02,1058,Morgan Jackson,morgan.jackson@example.com,debit,74.18,CAD,Amazon,Online Shopping,Amazon - Online Shopping,****9849,1081.62
+2575f2fd-0f26-4c49-97d7-ce4d7eeb8f61,2025-09-14,1058,Morgan Jackson,morgan.jackson@example.com,debit,296.28,CAD,Clinic,Healthcare,Clinic - Healthcare,****3927,785.34
+4dc6e42e-9b48-428a-b2e7-4bca68fb7369,2025-09-11,1059,Casey Taylor,casey.taylor@example.com,debit,612.77,CAD,Interac e-Transfer,Transfer,Interac e-Transfer - Transfer,****3200,4604.52
+adb805e6-d377-4e93-95f7-9a5bf682229d,2024-10-04,1060,Sydney Jones,sydney.jones@test.example,credit,192.14,CAD,Scotiabank,Transfer,Scotiabank - Transfer,****1488,6327.96
+a4debdf1-9f18-48f6-9cc2-6e40f4f815dc,2025-06-28,1060,Sydney Jones,sydney.jones@test.example,debit,116.34,CAD,Esso,Fuel,Esso - Fuel,****9883,6211.62
+81675f61-dcc3-4e76-bc17-bdc0d651ff7e,2025-08-08,1060,Sydney Jones,sydney.jones@test.example,credit,364.45,CAD,Clinic,Healthcare,Clinic - Healthcare,****7049,6576.07
+03a1e7a5-a08a-4425-b6af-fa3294ec9ee9,2025-07-25,1061,Casey Wilson,casey.wilson@demo.example,debit,110.9,CAD,Amazon,Online Shopping,Amazon - Online Shopping,****5333,4323.66
+fea39503-72f1-4f87-b7cd-cf5024790145,2025-08-02,1061,Casey Wilson,casey.wilson@demo.example,credit,120.23,CAD,Rogers,Utilities,Rogers - Utilities,****7209,4443.89
+dfc669c9-7b15-4778-8983-0b24a44e8449,2025-07-31,1063,Drew Wilson,drew.wilson@demo.example,debit,74.69,CAD,Costco,Retail,Costco - Retail,****7916,5598.23
+543ff3b2-817d-42c0-9678-58baff98618b,2024-10-13,1066,Jamie Moore,jamie.moore@example.com,debit,200.84,CAD,Amazon,Online Shopping,Amazon - Online Shopping,****2530,2342.56
+c33424b5-25f6-416a-bea3-14cc7201f9c6,2025-02-26,1066,Jamie Moore,jamie.moore@example.com,debit,42.25,CAD,Spotify,Entertainment,Spotify - Entertainment,****3223,2300.31
+08cfe174-4003-405b-8042-8c0c6f7985ca,2024-11-06,1067,Casey Garcia,casey.garcia@demo.example,debit,307.82,CAD,Home Depot,Home Improvement,Home Depot - Home Improvement,****9976,11824.04
+05b74f20-f337-4c0d-a308-9badc09b9940,2025-05-03,1068,Shawn Thomas,shawn.thomas@example.com,credit,448.03,CAD,Walmart,Groceries,Walmart - Groceries,****5616,2029.01
+4f739c7e-aee5-4cd4-a699-f944212fb062,2025-05-19,1068,Shawn Thomas,shawn.thomas@example.com,debit,35.52,CAD,Uber Eats,Food & Drink,Uber Eats - Food & Drink,****6977,1993.49
+385ebb02-3c32-4c63-91b8-05ca4a7be27c,2024-10-11,1069,Riley Perez,riley.perez@test.example,debit,108.31,CAD,Uber Eats,Food & Drink,Uber Eats - Food & Drink,****7691,14701.55
+333c2b64-c927-4946-8e44-6c74bb92204e,2025-03-16,1070,Parker Wilson,parker.wilson@demo.example,debit,81.03,CAD,Esso,Fuel,Esso - Fuel,****7658,11616.52
+a4f81da4-63a9-44fe-bcb2-78fcbc248014,2025-08-15,1071,Elliot Taylor,elliot.taylor@example.com,debit,241.17,CAD,Toronto Transit,Transport,Toronto Transit - Transport,****4139,3140.21
+f59c30c3-0d29-4021-9213-44b8acc85625,2025-05-26,1072,Sydney Wilson,sydney.wilson@test.example,debit,40.74,CAD,Rogers,Utilities,Rogers - Utilities,****7624,539.33
+d604f733-8859-446b-98a5-0af0264faf04,2024-12-06,1073,Avery Lee,avery.lee@demo.example,credit,82.59,CAD,Uber Eats,Food & Drink,Uber Eats - Food & Drink,****9797,12406.78
+f99c528b-6b7e-4ff0-beed-c901836387d3,2025-05-16,1073,Avery Lee,avery.lee@demo.example,debit,69.38,CAD,Starbucks,Food & Drink,Starbucks - Food & Drink,****8962,12337.4
+1bd930b6-491d-45b1-ac6b-b7da1edacdae,2025-09-15,1074,Devin Anderson,devin.anderson@test.example,debit,189.06,CAD,Hydro One,Utilities,Hydro One - Utilities,****6279,10560.37
+fe3de1ad-21d8-4499-9b25-def8e5978d09,2025-01-30,1079,Devin Garcia,devin.garcia@test.example,debit,103.79,CAD,DoorDash,Food & Drink,DoorDash - Food & Drink,****5050,2076.31
+30c8a1cb-eb96-4b8e-8243-ff045e78fd59,2025-04-18,1079,Devin Garcia,devin.garcia@test.example,debit,120.02,CAD,Bell Canada,Utilities,Bell Canada - Utilities,****7046,1956.29
+092039e9-93df-43fe-9613-68482bc9dfc0,2025-05-14,1079,Devin Garcia,devin.garcia@test.example,debit,250.17,CAD,IKEA,Retail,IKEA - Retail,****8062,1706.12
+15cad917-416a-4e2b-96b9-6e6e56e9c985,2025-08-08,1079,Devin Garcia,devin.garcia@test.example,debit,257.51,CAD,LCBO,Alcohol,LCBO - Alcohol,****9856,1448.61
+310335d3-dfd2-428e-b168-c4a4eb15181e,2025-02-05,1080,Taylor Anderson,taylor.anderson@example.com,debit,115.96,CAD,Shell,Fuel,Shell - Fuel,****9817,12899.04
+461887f7-7b0d-49b2-b9dd-c8d76399fbd8,2025-07-04,1080,Taylor Anderson,taylor.anderson@example.com,debit,305.65,CAD,Rogers,Utilities,Rogers - Utilities,****8019,12593.39
+eb12d9b8-4a22-46db-a0c4-fc27ef454125,2025-08-11,1080,Taylor Anderson,taylor.anderson@example.com,debit,84.2,CAD,Costco,Retail,Costco - Retail,****3705,12509.19
+c951da7c-67bc-4e4e-9812-a0a8c236c120,2024-10-05,1081,Avery Wilson,avery.wilson@test.example,debit,17.03,CAD,Uber Eats,Food & Drink,Uber Eats - Food & Drink,****5033,9520.79
+f7646601-a326-4c76-a3d4-925b9991e303,2025-06-25,1081,Avery Wilson,avery.wilson@test.example,debit,1417.22,CAD,Scotiabank,Transfer,Scotiabank - Transfer,****2832,8103.57
+0f26eb24-9aed-47fc-8fa4-a0a45f3fc088,2025-08-15,1081,Avery Wilson,avery.wilson@test.example,debit,119.28,CAD,Scotiabank,Transfer,Scotiabank - Transfer,****9701,7984.29
+c9b8c354-c01d-4e07-83ce-37eb60ce8f23,2025-04-26,1082,Elliot Thomas,elliot.thomas@demo.example,debit,1087.68,CAD,Interac e-Transfer,Transfer,Interac e-Transfer - Transfer,****8744,4210.34
+c72ce628-6234-4966-9617-695846641fa8,2025-05-03,1082,Elliot Thomas,elliot.thomas@demo.example,credit,513.53,CAD,Cineplex,Entertainment,Cineplex - Entertainment,****9835,4723.87
+1784ae55-6f07-41ec-83aa-fe95b328e2e8,2025-06-10,1082,Elliot Thomas,elliot.thomas@demo.example,debit,512.04,CAD,Netflix,Entertainment,Netflix - Entertainment,****5092,4211.83
+58a5e3dc-c7e8-4e8f-ad13-6475e825fc45,2025-06-24,1082,Elliot Thomas,elliot.thomas@demo.example,debit,807.51,CAD,WestJet,Travel,WestJet - Travel,****2169,3404.32
+f8b95803-4fed-4412-a25f-8ebe76cdc8f6,2025-02-25,1084,Jordan Jackson,jordan.jackson@example.com,debit,187.0,CAD,Sobeys,Groceries,Sobeys - Groceries,****2188,4822.24
+d2624106-6d4e-4372-97ce-37c92901d089,2024-11-21,1089,Taylor Jackson,taylor.jackson@example.com,debit,299.21,CAD,Toronto Transit,Transport,Toronto Transit - Transport,****9085,7047.91
+2d136e2e-c349-44f9-a144-ce0e66853861,2024-12-31,1090,Sam Perez,sam.perez@example.com,debit,272.91,CAD,Beer Store,Alcohol,Beer Store - Alcohol,****7939,1961.21
+366e0efa-5aad-42b7-a2f0-790d4e19981b,2025-08-24,1092,Sydney Jackson,sydney.jackson@example.com,debit,267.16,CAD,Scotiabank,Transfer,Scotiabank - Transfer,****2291,11264.22
+2ef5935e-103f-4144-8121-624000de4c53,2024-11-02,1093,Devin Garcia,devin.garcia@test.example,debit,1861.16,CAD,Scotiabank,Transfer,Scotiabank - Transfer,****3900,6777.36
+b1da2060-8524-4d48-b509-4a0ce6a51195,2025-02-03,1094,Quinn Davis,quinn.davis@test.example,debit,17.16,CAD,DoorDash,Food & Drink,DoorDash - Food & Drink,****6539,11661.86
+ee5d2d62-6435-4a2b-91b2-340493954819,2025-08-05,1094,Quinn Davis,quinn.davis@test.example,debit,235.99,CAD,Sobeys,Groceries,Sobeys - Groceries,****4505,11425.87
+99007024-d0ea-4e05-9b99-732a3a76ec25,2025-09-08,1094,Quinn Davis,quinn.davis@test.example,credit,255.37,CAD,Amazon,Online Shopping,Amazon - Online Shopping,****8956,11681.24
+b779b7b3-e3ab-4206-ab09-d2151a1699ac,2024-10-08,1098,Jordan Thomas,jordan.thomas@demo.example,debit,138.6,CAD,Walmart,Groceries,Walmart - Groceries,****7043,729.98
+a8da2a37-58c3-4036-b4da-d4d46a76cef3,2025-02-24,1099,Morgan Jackson,morgan.jackson@test.example,debit,58.12,CAD,Clinic,Healthcare,Clinic - Healthcare,****4978,2006.31
