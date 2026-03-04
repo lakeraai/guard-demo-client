@@ -25,7 +25,7 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 
 - Python 3.8–3.12 (3.13+ may break some deps like pandas; use `pyenv` or Homebrew `python@3.12` if needed)
 - Node.js 16+
-- OpenAI API key
+- **OpenAI API key** or **LiteLLM virtual key** (either works; use Admin → Security to configure)
 - Lakera API key (optional)
 
 ## 🛠️ Installation
@@ -119,6 +119,8 @@ LiteLLM runs as a separate proxy for virtual keys and model management. Default 
    ```
 
 4. Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and mint keys there. Master key for API: `sk-demo-master-key` (or set `LITELLM_MASTER_KEY` in `.env`).
+
+5. **Ollama (optional):** The config includes `ollama-llama` and `ollama-mistral`. Run [Ollama](https://ollama.ai) locally (`ollama run llama3.2`, etc.), then use these models via the LiteLLM proxy.
 
 ## 🌐 Access Points
 
@@ -226,7 +228,7 @@ lakeraclientdemov2/
 │   ├── models.py           # SQLAlchemy models
 │   ├── schemas.py          # Pydantic schemas
 │   ├── database.py         # Database connection
-│   ├── openai_client.py    # OpenAI integration
+│   ├── llm_client.py       # LLM integration (OpenAI or LiteLLM proxy)
 │   ├── rag.py             # RAG service
 │   ├── lakera.py          # Lakera integration
 │   ├── toolhive.py        # ToolHive service

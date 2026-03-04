@@ -4,7 +4,7 @@
 
 general_settings:
   master_key: sk-demo-master-key
-  database_url: postgresql://litellm:litellm@localhost:5432/litellm
+  database_url: postgresql://litellm:litellm@localhost:5433/litellm
   forward_client_headers_to_llm_api: true  # Forwards OAuth token to Anthropic (no API key needed)
 
 litellm_settings:
@@ -14,3 +14,12 @@ model_list:
   - model_name: anthropic-claude
     litellm_params:
       model: anthropic/claude-sonnet-4-6
+  # Ollama – requires Ollama running at http://localhost:11434
+  - model_name: ollama-llama
+    litellm_params:
+      model: ollama_chat/llama3.2
+      api_base: http://localhost:11434
+  - model_name: ollama-mistral
+    litellm_params:
+      model: ollama_chat/mistral
+      api_base: http://localhost:11434
