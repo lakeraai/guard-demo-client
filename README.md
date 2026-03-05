@@ -17,7 +17,7 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 
 - **Frontend**: Vite + React + TypeScript + Tailwind CSS
 - **Backend**: FastAPI + SQLite + ChromaDB
-- **LLM**: OpenAI (chat + embeddings)
+- **LLM**: OpenAI or LiteLLM proxy (chat + embeddings)
 - **Vector DB**: ChromaDB for RAG
 - **Security**: Lakera Guard for content moderation
 
@@ -310,6 +310,10 @@ lakeraclientdemov2/
 1. Go to Admin Console → Export/Import
 2. Upload previously exported JSON file
 3. Configuration will be restored
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for recent changes (LiteLLM integration, model selection).
 
 ## 🐛 Troubleshooting
 

@@ -7,7 +7,7 @@ import uuid
 import csv
 import json
 import re
-from .openai_client import openai_client
+from . import llm_client
 from .database import get_db
 from .models import AppConfig, RagSource
 from .lakera import check_interaction
@@ -367,7 +367,7 @@ async def retrieve(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
     """
     try:
         # Get embeddings for the query
-        query_embeddings = openai_client.get_embeddings([query])
+        query_embeddings = llm_client.get_embeddings([query])
         
         # Search in ChromaDB
         results = collection.query(
@@ -555,10 +555,11 @@ Constraints: {options.get('constraints', '')}
             {"role": "user", "content": user_prompt}
         ]
         
-        response = openai_client.chat_completion(
+        response = llm_client.chat_completion(
             messages=messages,
             model=config.openai_model,
-            temperature=float(config.temperature) / 10.0
+            temperature=config.temperature,
+            config=config,
         )
         
         markdown = response["choices"][0]["message"]["content"]
@@ -721,7 +722,7 @@ async def ingest_with_smart_chunking(content: str, filename: str, mimetype: str,
                 }
             
             print(f"🔍 Getting embeddings for {len(valid_chunks)} valid chunks (filtered from {len(chunks)} total)")
-            embeddings = openai_client.get_embeddings(valid_chunks)
+            embeddings = llm_client.get_embeddings(valid_chunks)
             
             # Update chunks and metadata to match valid chunks
             if len(valid_chunks) != len(chunks):

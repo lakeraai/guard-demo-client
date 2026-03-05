@@ -146,7 +146,7 @@ async def execute(tool_name: str, args: Dict[str, Any], tool_metadata: Dict[str,
                 raw_result = await execute_mcp_tool(tool_info, args, db, tool_name)
         elif tool_info["type"] == "http":
             if enable_multi_step:
-                raw_result = await execute_http_tool_multi_step(tool_info, args, lakera_api_key, lakera_project_id, lakera_blocking_mode, tool_name)
+                raw_result = await execute_http_tool_multi_step(tool_info, args, db, lakera_api_key, lakera_project_id, lakera_blocking_mode, tool_name)
             else:
                 raw_result = await execute_http_tool(tool_info, args, tool_name)
         else:
@@ -216,19 +216,17 @@ async def execute_mcp_tool(tool: Dict[str, Any], args: Dict[str, Any], db: Sessi
         endpoint = tool["endpoint"]
         print(f"🔧 Executing MCP tool: {tool['name']} at {endpoint}")
         
-        # Use our existing OpenAI client
-        from .openai_client import openai_client
+        from . import llm_client
         from .mcp import build_transport, mcp_initialize, try_list, mcp_call
+        from .models import AppConfig
         
-        # Reload config to get latest API key
-        openai_client._load_config()
-        
-        if not openai_client.client:
+        config = db.query(AppConfig).first()
+        if not config or not config.openai_api_key:
             return {
                 "status": "error",
-                "error": "OpenAI client not configured",
+                "error": "LLM client not configured",
                 "tool_name": tool["name"],
-                "details": "Please configure the OpenAI API key in the admin interface"
+                "details": "Please configure the LLM API key in the admin interface"
             }
         
         # Build the appropriate transport (HTTP or SSE)
@@ -777,19 +775,17 @@ async def execute_mcp_tool_multi_step(tool: Dict[str, Any], args: Dict[str, Any]
         endpoint = tool["endpoint"]
         print(f"🔧 Executing MCP tool (multi-step): {tool['name']} at {endpoint}")
         
-        # Use our existing OpenAI client
-        from .openai_client import openai_client
+        from . import llm_client
         from .mcp import build_transport, mcp_initialize, try_list, mcp_call, HTTPTransport, SSETransport
+        from .models import AppConfig
         
-        # Reload config to get latest API key
-        openai_client._load_config()
-        
-        if not openai_client.client:
+        config = db.query(AppConfig).first()
+        if not config or not config.openai_api_key:
             return {
                 "status": "error",
-                "error": "OpenAI client not configured",
+                "error": "LLM client not configured",
                 "tool_name": tool["name"],
-                "details": "Please configure the OpenAI API key in the admin interface"
+                "details": "Please configure the LLM API key in the admin interface"
             }
         
         # Build the appropriate transport (HTTP or SSE)
@@ -849,27 +845,29 @@ async def execute_mcp_tool_multi_step(tool: Dict[str, Any], args: Dict[str, Any]
             while max_loops > 0:
                 max_loops -= 1
                 
-                # Get OpenAI response
-                resp = openai_client.client.chat.completions.create(
-                    model=openai_client.model,
+                # Get LLM response
+                resp = llm_client.chat_completion(
                     messages=messages,
+                    model=config.openai_model,
+                    temperature=config.temperature,
                     tools=openai_tools,
-                    tool_choice="auto"
+                    config=config,
                 )
                 
-                msg = resp.choices[0].message
+                msg = resp["choices"][0]["message"]
+                tool_calls = msg.get("tool_calls")
                 messages.append({
                     "role": "assistant",
-                    "content": msg.content,
-                    "tool_calls": msg.tool_calls
-                } if msg.tool_calls else {
-                    "role": "assistant", 
-                    "content": msg.content
+                    "content": msg.get("content"),
+                    "tool_calls": tool_calls
+                } if tool_calls else {
+                    "role": "assistant",
+                    "content": msg.get("content")
                 })
                 
                 # If the model answered directly, we're done
-                if not msg.tool_calls:
-                    final_content = msg.content or "(no answer)"
+                if not tool_calls:
+                    final_content = msg.get("content") or "(no answer)"
                     return {
                         "status": "success",
                         "content": f"Multi-step execution completed: {final_content}",
@@ -879,16 +877,17 @@ async def execute_mcp_tool_multi_step(tool: Dict[str, Any], args: Dict[str, Any]
                     }
                 
                 # Execute each tool call
-                for call in msg.tool_calls:
-                    name = call.function.name
-                    args_json = call.function.arguments or "{}"
+                for call in tool_calls:
+                    func = call.get("function", {})
+                    name = func.get("name", "")
+                    args_json = func.get("arguments") or "{}"
                     
                     try:
                         call_args = json.loads(args_json)
                     except Exception as e:
                         messages.append({
                             "role": "tool",
-                            "tool_call_id": call.id,
+                            "tool_call_id": call.get("id"),
                             "content": json.dumps({"error": f"Invalid JSON args for '{name}': {e}"})
                         })
                         continue
@@ -912,14 +911,14 @@ async def execute_mcp_tool_multi_step(tool: Dict[str, Any], args: Dict[str, Any]
                         
                         messages.append({
                             "role": "tool",
-                            "tool_call_id": call.id,
+                            "tool_call_id": call.get("id"),
                             "content": json.dumps(result, ensure_ascii=False)
                         })
                         
                     except Exception as e:
                         messages.append({
                             "role": "tool",
-                            "tool_call_id": call.id,
+                            "tool_call_id": call.get("id"),
                             "content": json.dumps({"error": f"MCP tool '{name}' call failed: {e}"})
                         })
             
@@ -974,11 +973,11 @@ async def execute_mcp_tool_multi_step(tool: Dict[str, Any], args: Dict[str, Any]
             "details": "The MCP server may be unreachable or there may be a protocol mismatch"
         }
 
-async def execute_http_tool_multi_step(tool: Dict[str, Any], args: Dict[str, Any], lakera_api_key: Optional[str] = None, lakera_project_id: Optional[str] = None, lakera_blocking_mode: bool = True, function_name: str = None) -> Dict[str, Any]:
+async def execute_http_tool_multi_step(tool: Dict[str, Any], args: Dict[str, Any], db: Session, lakera_api_key: Optional[str] = None, lakera_project_id: Optional[str] = None, lakera_blocking_mode: bool = True, function_name: str = None) -> Dict[str, Any]:
     """
     Execute an HTTP tool with multi-step capability
     This is essentially the same as MCP multi-step since HTTP tools use MCP transport
     """
     # For HTTP tools, we use the same multi-step logic as MCP tools
     # since they both use the MCP transport layer
-    return await execute_mcp_tool_multi_step(tool, args, None, lakera_api_key, lakera_project_id, lakera_blocking_mode)
+    return await execute_mcp_tool_multi_step(tool, args, db, lakera_api_key, lakera_project_id, lakera_blocking_mode)

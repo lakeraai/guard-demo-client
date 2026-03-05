@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List, Optional
 import os
 import shutil
@@ -33,10 +34,26 @@ from .schemas import (
 from .agent import run_agent, AgentRequest
 from . import lakera, rag
 from .toolhive import enabled_tools, discover_mcp_tool_capabilities_sync, store_capabilities
-from .openai_client import openai_client
+from . import llm_client
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+
+def _migrate_app_config_litellm():
+    """Add use_litellm and litellm_base_url to app_config if missing (existing DBs)"""
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "use_litellm" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN use_litellm BOOLEAN DEFAULT 0"))
+            conn.commit()
+        if "litellm_base_url" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN litellm_base_url VARCHAR"))
+            conn.commit()
+
+
+_migrate_app_config_litellm()
 
 app = FastAPI(
     title="Agentic Demo API",
@@ -84,6 +101,16 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
     for field, value in config_update.dict(exclude_unset=True).items():
         setattr(config, field, value)
     
+    # Auto-pick model when saving LiteLLM key: if current model invalid for key, set to first allowed
+    use_litellm = getattr(config, "use_litellm", False)
+    if use_litellm and config.openai_api_key:
+        allowed = llm_client.get_models(config)
+        if allowed and (not config.openai_model or config.openai_model not in allowed):
+            config.openai_model = allowed[0]
+    # Auto-pick when switching to direct OpenAI: if model (e.g. ollama-phi3) not in static list, fix it
+    elif not use_litellm and config.openai_model not in llm_client.STATIC_MODELS:
+        config.openai_model = llm_client.STATIC_MODELS[0]
+    
     db.commit()
     db.refresh(config)
     return config
@@ -114,6 +141,8 @@ async def export_config(db: Session = Depends(get_db)):
                     "temperature": config.temperature,
                     "lakera_enabled": config.lakera_enabled,
                     "lakera_blocking_mode": config.lakera_blocking_mode,
+                    "use_litellm": getattr(config, "use_litellm", False),
+                    "litellm_base_url": getattr(config, "litellm_base_url", None),
                     "created_at": config.created_at.isoformat() if config.created_at else None,
                     "updated_at": config.updated_at.isoformat() if config.updated_at else None
                 }
@@ -273,9 +302,19 @@ async def import_config(file: UploadFile = File(...), db: Session = Depends(get_
                 openai_model=config_data.get("openai_model", "gpt-4o-mini"),
                 temperature=config_data.get("temperature", "0.7"),
                 lakera_enabled=config_data.get("lakera_enabled", True),
-                lakera_blocking_mode=config_data.get("lakera_blocking_mode", False)
+                lakera_blocking_mode=config_data.get("lakera_blocking_mode", False),
+                use_litellm=config_data.get("use_litellm", False),
+                litellm_base_url=config_data.get("litellm_base_url")
             )
             db.add(new_config)
+            # Auto-pick model when imported config has LiteLLM or invalid model for OpenAI
+            use_litellm = new_config.use_litellm or False
+            if use_litellm and new_config.openai_api_key:
+                allowed = llm_client.get_models(new_config)
+                if allowed and (not new_config.openai_model or new_config.openai_model not in allowed):
+                    new_config.openai_model = allowed[0]
+            elif not use_litellm and new_config.openai_model not in llm_client.STATIC_MODELS:
+                new_config.openai_model = llm_client.STATIC_MODELS[0]
             
             # Import Tools and MCP Capabilities
             with open(os.path.join(temp_dir, "tools.json"), 'r') as f:
@@ -859,7 +898,7 @@ async def get_rag_scanning_progress():
 async def get_available_models():
     """Get available OpenAI models"""
     try:
-        models = openai_client.get_models()
+        models = llm_client.get_models()
         return {"models": models}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")

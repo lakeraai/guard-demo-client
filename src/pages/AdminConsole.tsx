@@ -41,6 +41,13 @@ const AdminConsole: React.FC = () => {
     }
   }, [activeTab]);
 
+  // Reload models when switching to LLM tab (e.g. after saving LiteLLM key in Security)
+  useEffect(() => {
+    if (activeTab === 'llm') {
+      loadModels();
+    }
+  }, [activeTab]);
+
   // Poll for RAG scanning progress
   useEffect(() => {
     let intervalId: number;
@@ -265,10 +272,13 @@ const AdminConsole: React.FC = () => {
         openai_api_key: updates.openai_api_key,
         lakera_api_key: updates.lakera_api_key,
         lakera_project_id: updates.lakera_project_id,
+        use_litellm: updates.use_litellm ?? config.use_litellm,
+        litellm_base_url: updates.litellm_base_url ?? config.litellm_base_url,
       };
 
       await apiService.updateConfig(updatedConfig);
       await loadConfig();
+      await loadModels();
       setMessage({ type: 'success', text: 'Configuration updated successfully' });
     } catch (error) {
       console.error('Failed to update config:', error);
@@ -314,6 +324,7 @@ const AdminConsole: React.FC = () => {
     try {
       await apiService.importConfig(file);
       await loadConfig();
+      await loadModels();
       setMessage({ type: 'success', text: 'Configuration imported successfully' });
     } catch (error) {
       console.error('Import failed:', error);
@@ -615,6 +626,11 @@ const AdminConsole: React.FC = () => {
           {activeTab === 'llm' && (
             <div className="space-y-6">
               <h2 className="text-lg font-semibold text-gray-900">LLM Configuration</h2>
+              {config.openai_model && availableModels.length > 0 && !availableModels.includes(config.openai_model) && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  Current model may not be available for this key. Select a model below and save.
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -625,6 +641,11 @@ const AdminConsole: React.FC = () => {
                     onChange={(e) => handleConfigUpdate({ openai_model: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
+                    {config.openai_model && !availableModels.includes(config.openai_model) && (
+                      <option key={config.openai_model} value={config.openai_model}>
+                        {config.openai_model.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} (not available)
+                      </option>
+                    )}
                     {availableModels.map((model) => (
                       <option key={model} value={model}>
                         {model.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -1026,16 +1047,53 @@ const AdminConsole: React.FC = () => {
                   )}
                 </div>
                 
+                <div className="flex items-center space-x-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => handleConfigUpdate({ use_litellm: !(config.use_litellm ?? false) })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                      config.use_litellm ? 'bg-primary-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        (config.use_litellm ?? false) ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">
+                      Use LiteLLM proxy
+                    </label>
+                    <p className="text-xs text-gray-500">
+                      Route LLM calls through LiteLLM instead of direct OpenAI
+                    </p>
+                  </div>
+                </div>
+                {(config.use_litellm ?? false) && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      LiteLLM base URL
+                    </label>
+                    <input
+                      type="text"
+                      value={config.litellm_base_url || 'http://localhost:4000'}
+                      onChange={(e) => handleConfigUpdate({ litellm_base_url: e.target.value })}
+                      placeholder="http://localhost:4000"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    OpenAI API Key
+                    {(config.use_litellm ?? false) ? 'LiteLLM virtual key' : 'OpenAI API key'}
                   </label>
                   <div className="relative">
                     <input
                       type={showOpenAIKey ? "text" : "password"}
                       value={config.openai_api_key || ""}
                       onChange={(e) => handleConfigUpdate({ openai_api_key: e.target.value })}
-                      placeholder="sk-..."
+                      placeholder={config.use_litellm ? "sk-..." : "sk-..."}
                       className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                     <button

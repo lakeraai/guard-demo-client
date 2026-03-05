@@ -21,6 +21,8 @@ class AppConfig(Base):
     temperature = Column(String, default="7")
     lakera_enabled = Column(Boolean, default=True)
     lakera_blocking_mode = Column(Boolean, default=False)
+    use_litellm = Column(Boolean, default=False)
+    litellm_base_url = Column(String, nullable=True)
     rag_content_scanning = Column(Boolean, default=False)
     rag_lakera_project_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

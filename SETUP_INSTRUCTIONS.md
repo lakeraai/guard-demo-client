@@ -39,7 +39,7 @@ Step-by-step from the README. Do these in order.
 
 4. **Configure the app**
    - Open **http://localhost:3000/admin**
-   - **Security** tab: add your **OpenAI API key** (required); optionally Lakera API key
+   - **Security** tab: add your **OpenAI API key** or **LiteLLM virtual key** (required); optionally Lakera API key
    - Use other tabs for branding, LLM, RAG, tools, demo prompts
 
 ---
@@ -65,6 +65,18 @@ npm run dev
 ```
 
 Then open http://localhost:3000 and http://localhost:3000/admin and add your OpenAI key in Admin → Security.
+
+---
+
+## Using LiteLLM virtual key
+
+If you use the LiteLLM proxy instead of direct OpenAI:
+
+1. Start the LiteLLM proxy (see "Optional: LiteLLM proxy" below).
+2. In **Admin → Security**, enable **Use LiteLLM proxy**.
+3. Paste your **LiteLLM virtual key** (from http://localhost:4000/ui) into the API key field.
+4. Optionally set **LiteLLM base URL** if your proxy runs elsewhere (default: `http://localhost:4000`).
+5. **Model selection**: The app fetches models allowed for your key from the proxy. The LLM tab dropdown shows only valid models. If you save a key with an invalid model selected, the app auto-picks the first allowed model.
 
 ---
 
@@ -122,3 +134,22 @@ Only if you want the LiteLLM proxy for virtual keys and model management.
 - **Frontend won’t start** – Node 16+, port 3000 free, `npm install`.
 - **API errors** – Set OpenAI API key in Admin → Security.
 - **DB issues** – Remove `data/` to reset SQLite.
+
+### Ollama Metal error on Mac (bfloat/half mismatch)
+
+If you see `ggml_metal_init: error: failed to initialize the Metal library` or `Input types must match cooperative tensor types` when using Ollama, Apple’s Metal backend is failing with bfloat16 models.
+
+**Workaround – run Ollama in CPU mode:**
+
+```bash
+OLLAMA_CPU=1 ollama serve
+```
+
+Or set it before starting Ollama:
+
+```bash
+export OLLAMA_CPU=1
+ollama run phi3   # or mistral, llama3.2, etc.
+```
+
+**Alternative:** Use models that work with Metal (e.g. phi3, mistral, gemma2). The default `litellm/config.yaml` uses phi3 for `ollama-llama`.

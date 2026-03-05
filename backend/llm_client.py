@@ -3,10 +3,28 @@ Unified LLM client that routes to OpenAI or LiteLLM proxy based on config.
 Exposes chat_completion, get_embeddings, get_models with same signatures as openai_client.
 """
 import openai
+import httpx
 from typing import List, Dict, Any, Optional, Union
 
 from .database import get_db
 from .models import AppConfig
+
+# Timeout for LiteLLM /v1/models request (seconds)
+LITELLM_MODELS_TIMEOUT = 10.0
+
+STATIC_MODELS = [
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4",
+    "gpt-4-turbo",
+    "gpt-3.5-turbo",
+    "anthropic-claude",
+    "ollama-llama",
+    "ollama-mistral",
+]
 
 
 def _get_config() -> Optional[AppConfig]:
@@ -173,18 +191,44 @@ def get_embeddings(texts: List[str], config: Optional[AppConfig] = None) -> List
         raise Exception(f"LLM API error: {e}") from e
 
 
+def _get_models_litellm(api_key: str, base_url: str) -> Optional[List[str]]:
+    """
+    Fetch key-specific models from LiteLLM proxy.
+    Returns list of model ids on success, None on failure (malformed response, timeout, 401, etc).
+    """
+    url = f"{base_url.rstrip('/')}/v1/models"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        with httpx.Client(timeout=LITELLM_MODELS_TIMEOUT) as client:
+            resp = client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+    except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError, ValueError):
+        return None
+    data_list = data.get("data")
+    if not isinstance(data_list, list):
+        return None
+    result = []
+    for m in data_list:
+        if isinstance(m, dict) and m.get("id"):
+            result.append(str(m["id"]))
+    return result if result else None
+
+
 def get_models(config: Optional[AppConfig] = None) -> List[str]:
-    """Get available models. Includes OpenAI, LiteLLM proxy models (anthropic-claude, ollama-*), etc."""
-    return [
-        "gpt-5",
-        "gpt-5-mini",
-        "gpt-5-nano",
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4",
-        "gpt-4-turbo",
-        "gpt-3.5-turbo",
-        "anthropic-claude",
-        "ollama-llama",
-        "ollama-mistral",
-    ]
+    """
+    Get available models. When using LiteLLM, returns key-specific models from proxy.
+    Falls back to static list when not using LiteLLM, or when LiteLLM fetch fails/returns empty.
+    """
+    cfg = config or _get_config()
+    if not cfg:
+        return STATIC_MODELS
+    use_litellm = getattr(cfg, "use_litellm", False)
+    api_key = cfg.openai_api_key
+    if not use_litellm or not api_key:
+        return STATIC_MODELS
+    litellm_base_url = getattr(cfg, "litellm_base_url", None) or "http://localhost:4000"
+    models = _get_models_litellm(api_key=api_key, base_url=litellm_base_url)
+    if models:
+        return models
+    return STATIC_MODELS

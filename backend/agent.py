@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from .openai_client import openai_client
+from . import llm_client
 from .models import AppConfig
 from . import rag, toolhive, lakera
 
@@ -83,17 +83,15 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
     messages.append({
         "role": "user",
         "content": req.message
-    })     # Step 4: Call OpenAI with tools
+    })     # Step 4: Call LLM with tools
     try:
-        # Reload config to get latest API key
-        openai_client._load_config()
-        
-        # First call to OpenAI with tools manifest
-        response = openai_client.chat_completion(
+        # First call to LLM with tools manifest
+        response = llm_client.chat_completion(
             messages=messages,
             model=cfg.openai_model,
             temperature=cfg.temperature,
-            tools=tools_manifest if tools_manifest else None
+            tools=tools_manifest if tools_manifest else None,
+            config=cfg,
         )
         
         # Extract the response
@@ -163,12 +161,13 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
                     "result": tool_result
                 })
             
-            # Make second call to OpenAI with tool results
-            print(f"🔧 Making follow-up call to OpenAI with tool results")
-            final_response = openai_client.chat_completion(
+            # Make second call to LLM with tool results
+            print(f"🔧 Making follow-up call to LLM with tool results")
+            final_response = llm_client.chat_completion(
                 messages=messages,
                 model=cfg.openai_model,
-                temperature=cfg.temperature
+                temperature=cfg.temperature,
+                config=cfg,
             )
             
             # Get final response

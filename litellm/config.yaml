@@ -4,7 +4,7 @@
 
 general_settings:
   master_key: sk-demo-master-key
-  database_url: postgresql://litellm:litellm@localhost:5433/litellm
+  database_url: postgresql://litellm:litellm@localhost:5432/litellm
   forward_client_headers_to_llm_api: true  # Forwards OAuth token to Anthropic (no API key needed)
 
 litellm_settings:
@@ -15,11 +15,9 @@ model_list:
     litellm_params:
       model: anthropic/claude-sonnet-4-6
   # Ollama – requires Ollama running at http://localhost:11434
-  - model_name: ollama-llama
+  # Note: llama3.2 uses bfloat16 and can fail on Mac Metal (bfloat/half mismatch).
+  # Use phi3, mistral, or gemma2 for reliable Metal GPU support.
+  - model_name: ollama-phi3
     litellm_params:
-      model: ollama_chat/llama3.2
-      api_base: http://localhost:11434
-  - model_name: ollama-mistral
-    litellm_params:
-      model: ollama_chat/mistral
+      model: ollama_chat/phi3
       api_base: http://localhost:11434
