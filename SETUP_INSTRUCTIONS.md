@@ -130,26 +130,7 @@ Only if you want the LiteLLM proxy for virtual keys and model management.
 
 ## Troubleshooting
 
-- **Backend won’t start** – Python 3.8+, port 8000 free, `pip install -r requirements.txt`.
-- **Frontend won’t start** – Node 16+, port 3000 free, `npm install`.
+- **Backend won't start** – Python 3.8+, port 8000 free, `pip install -r requirements.txt`.
+- **Frontend won't start** – Node 16+, port 3000 free, `npm install`.
 - **API errors** – Set OpenAI API key in Admin → Security.
 - **DB issues** – Remove `data/` to reset SQLite.
-
-### Ollama Metal error on Mac (bfloat/half mismatch)
-
-If you see `ggml_metal_init: error: failed to initialize the Metal library` or `Input types must match cooperative tensor types` when using Ollama, Apple’s Metal backend is failing with bfloat16 models.
-
-**Workaround – run Ollama in CPU mode:**
-
-```bash
-OLLAMA_CPU=1 ollama serve
-```
-
-Or set it before starting Ollama:
-
-```bash
-export OLLAMA_CPU=1
-ollama run phi3   # or mistral, llama3.2, etc.
-```
-
-**Alternative:** Use models that work with Metal (e.g. phi3, mistral, gemma2). The default `litellm/config.yaml` uses phi3 for `ollama-llama`.
