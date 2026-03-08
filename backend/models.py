@@ -23,6 +23,8 @@ class AppConfig(Base):
     lakera_blocking_mode = Column(Boolean, default=False)
     rag_content_scanning = Column(Boolean, default=False)
     rag_lakera_project_id = Column(String, nullable=True)
+    # UI theming
+    theme = Column(String, nullable=True, default="blue")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

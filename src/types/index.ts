@@ -6,6 +6,7 @@ export interface AppConfig {
   hero_text?: string;
   hero_image_url?: string;
   logo_url?: string;
+  theme?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
   rag_content_scanning: boolean;
@@ -26,6 +27,7 @@ export interface AppConfigUpdate {
   hero_text?: string;
   hero_image_url?: string;
   logo_url?: string;
+  theme?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
   rag_content_scanning: boolean;

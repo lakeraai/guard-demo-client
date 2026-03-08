@@ -21,9 +21,18 @@ const LandingPage: React.FC = () => {
       const configData = await apiService.getConfig();
       setConfig(configData);
       setIsLakeraEnabled(configData.lakera_enabled);
+      applyTheme(configData.theme);
     } catch (error) {
       console.error('Failed to load config:', error);
     }
+  };
+
+  const applyTheme = (theme?: string) => {
+    const themes = ['blue', 'emerald', 'purple', 'amber'];
+    const body = document.body;
+    themes.forEach(t => body.classList.remove(`theme-${t}`));
+    const key = theme && themes.includes(theme) ? theme : 'blue';
+    body.classList.add(`theme-${key}`);
   };
 
   const handleLakeraToggle = (enabled: boolean) => {

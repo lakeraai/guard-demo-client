@@ -16,6 +16,8 @@ class AppConfigBase(BaseModel):
     openai_model: str = "gpt-4o-mini"
     temperature: int = 7
     system_prompt: Optional[str] = None
+    # UI theme: e.g. "blue", "emerald", "purple", "amber"
+    theme: Optional[str] = "blue"
 
 class AppConfigResponse(AppConfigBase):
     id: int

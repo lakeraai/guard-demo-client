@@ -48,7 +48,21 @@ def _migrate_demo_prompts_preferred_llm():
             conn.execute(text("ALTER TABLE demo_prompts ADD COLUMN preferred_llm VARCHAR"))
             conn.commit()
 
+
+# Migration: add theme to app_config if missing (for UI theming)
+def _migrate_app_config_theme():
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "theme" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN theme VARCHAR"))
+            # Set a sensible default for existing rows
+            conn.execute(text("UPDATE app_config SET theme = 'blue' WHERE theme IS NULL"))
+            conn.commit()
+
+
 _migrate_demo_prompts_preferred_llm()
+_migrate_app_config_theme()
 
 app = FastAPI(
     title="Agentic Demo API",
@@ -102,7 +116,7 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
 
 # Export sections: which config fields belong to which section (for selective export/import)
 EXPORT_SECTIONS = {
-    "appearance": ["business_name", "tagline", "hero_text", "hero_image_url", "logo_url"],
+    "appearance": ["business_name", "tagline", "hero_text", "hero_image_url", "logo_url", "theme"],
     "llm": ["openai_model", "temperature", "system_prompt"],
     "security": ["lakera_enabled", "lakera_blocking_mode"],
     "rag_scanning": ["rag_content_scanning"],
