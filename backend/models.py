@@ -1,12 +1,14 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON
-from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
+
 class AppConfig(Base):
     __tablename__ = "app_config"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     openai_api_key = Column(String, nullable=True)
     lakera_api_key = Column(String, nullable=True)
@@ -28,9 +30,10 @@ class AppConfig(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 class Tool(Base):
     __tablename__ = "tools"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     type = Column(String)  # "mcp" or "http"
@@ -41,9 +44,10 @@ class Tool(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 class RagSource(Base):
     __tablename__ = "rag_sources"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     content = Column(Text)
@@ -52,9 +56,10 @@ class RagSource(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 class MCPToolCapabilities(Base):
     __tablename__ = "mcp_tool_capabilities"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     tool_id = Column(Integer, index=True)
     tool_name = Column(String, index=True)
@@ -65,9 +70,10 @@ class MCPToolCapabilities(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 class DemoPrompt(Base):
     __tablename__ = "demo_prompts"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
     content = Column(Text)
@@ -78,4 +84,3 @@ class DemoPrompt(Base):
     usage_count = Column(Integer, default=0)  # Track popularity
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
