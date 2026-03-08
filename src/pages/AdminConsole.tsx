@@ -47,6 +47,20 @@ const AdminConsole: React.FC = () => {
     loadModels();
     loadRagScanningResult();
   }, []);
+ 
+  useEffect(() => {
+    if (config) {
+      applyTheme(config.theme);
+    }
+  }, [config?.theme]);
+
+  const applyTheme = (theme?: string) => {
+    const themes = ['blue', 'emerald', 'purple', 'amber'];
+    const body = document.body;
+    themes.forEach(t => body.classList.remove(`theme-${t}`));
+    const key = theme && themes.includes(theme) ? theme : 'blue';
+    body.classList.add(`theme-${key}`);
+  };
 
   // Clear notification when user views the RAG scanning report
   useEffect(() => {
@@ -269,6 +283,7 @@ const AdminConsole: React.FC = () => {
         hero_text: updates.hero_text ?? config.hero_text,
         hero_image_url: updates.hero_image_url ?? config.hero_image_url,
         logo_url: updates.logo_url ?? config.logo_url,
+        theme: updates.theme ?? config.theme,
         lakera_enabled: lakeraEnabled,
         lakera_blocking_mode: updates.lakera_blocking_mode ?? config.lakera_blocking_mode,
         rag_content_scanning: ragContentScanning,
@@ -635,6 +650,25 @@ const AdminConsole: React.FC = () => {
                     onChange={(e) => handleConfigUpdate({ hero_image_url: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Theme
+                  </label>
+                  <select
+                    value={config.theme || 'blue'}
+                    onChange={(e) => handleConfigUpdate({ theme: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="blue">Blue (Default Tech)</option>
+                    <option value="emerald">Emerald (FinTech / Green)</option>
+                    <option value="purple">Purple (SaaS)</option>
+                    <option value="amber">Amber (Enterprise)</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Changes primary accent colors and font to better match your prospect&apos;s branding.
+                  </p>
                 </div>
               </div>
             </div>
