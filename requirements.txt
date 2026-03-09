@@ -15,4 +15,5 @@ markdown==3.5.1
 pandas==2.1.4
 requests==2.31.0
 httpx==0.25.2
-
+litellm[proxy]
+prisma
