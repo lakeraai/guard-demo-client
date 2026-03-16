@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-import os
-import re
 import json
-import time
+import os
 import queue
+import re
 import threading
-from typing import Dict, Any, Optional, List, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
-from jsonschema import validate, ValidationError
-from urllib.parse import urljoin, urlparse, parse_qs
+from jsonschema import ValidationError, validate
 
 # ---------------- OpenAI (Chat Completions) --------------
 try:
     from openai import OpenAI
-except Exception:
-    raise RuntimeError("OpenAI SDK not found. Install: pip install openai")
+except Exception as e:
+    raise RuntimeError("OpenAI SDK not found. Install: pip install openai") from e
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -30,13 +30,16 @@ INIT_PARAMS = {
 #                        TRANSPORTS
 # =========================================================
 
+
 class MCPTransport:
     def initialize(self) -> Dict[str, Any]: ...
     def send_request(self, method: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]: ...
     def send_notification(self, method: str, params: Optional[Dict[str, Any]]) -> None: ...
     def close(self) -> None: ...
 
+
 # ----------------------- HTTP ----------------------------
+
 
 class HTTPTransport(MCPTransport):
     """
@@ -45,6 +48,7 @@ class HTTPTransport(MCPTransport):
     - Echo 'Mcp-Session-Id' after the server provides it (if any)
     - Accepts servers that demand Accept: 'application/json, text/event-stream' on POST
     """
+
     def __init__(self, base_url: str, timeout: float = 60.0):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -77,16 +81,20 @@ class HTTPTransport(MCPTransport):
             raise RuntimeError("SSE_BODY_ON_HTTP")
         try:
             return r.json()
-        except Exception:
-            raise RuntimeError(f"Invalid JSON response from {self.base_url}: {body[:300]}")
+        except Exception as e:
+            raise RuntimeError(f"Invalid JSON response from {self.base_url}: {body[:300]}") from e
 
     def initialize(self) -> Dict[str, Any]:
         req = {"jsonrpc": "2.0", "id": self._next_id(), "method": "initialize", "params": INIT_PARAMS}
         r, body = self._post_raw(req)
         res = self._parse_json(r, body)
         # Required notification (best-effort)
-        self.session.post(self.base_url, json={"jsonrpc": "2.0", "method": "initialized", "params": {}},
-                          timeout=self.timeout, headers=self._headers())
+        self.session.post(
+            self.base_url,
+            json={"jsonrpc": "2.0", "method": "initialized", "params": {}},
+            timeout=self.timeout,
+            headers=self._headers(),
+        )
         if "error" in res:
             raise RuntimeError(f"MCP error {res['error']}")
         return res.get("result", res)
@@ -113,7 +121,9 @@ class HTTPTransport(MCPTransport):
         except Exception:
             pass
 
+
 # ------------------------ SSE ----------------------------
+
 
 class SSETransport(MCPTransport):
     """
@@ -123,6 +133,7 @@ class SSETransport(MCPTransport):
       - Always echo the latest 'Mcp-Session-Id' seen (header or endpoint query)
       - Responses may arrive on stream OR embedded as an SSE block in POST body
     """
+
     def __init__(self, sse_url: str, timeout: float = 60.0):
         self.base_url = re.sub(r"#.*$", "", sse_url.rstrip("/"))
         self.timeout = timeout
@@ -171,8 +182,9 @@ class SSETransport(MCPTransport):
 
     def _start_stream(self):
         def reader():
-            with self.session.get(self.base_url, stream=True, timeout=None,
-                                  headers={"Accept": "text/event-stream"}) as r:
+            with self.session.get(
+                self.base_url, stream=True, timeout=None, headers={"Accept": "text/event-stream"}
+            ) as r:
                 sid = r.headers.get("Mcp-Session-Id") or r.headers.get("MCP-Session-Id")
                 if sid:
                     self.session_id = sid
@@ -259,8 +271,8 @@ class SSETransport(MCPTransport):
         if not env:
             try:
                 env = self._resp_map[req_id].get(timeout=self.timeout)
-            except queue.Empty:
-                raise TimeoutError("Timed out waiting for initialize response on SSE stream")
+            except queue.Empty as e:
+                raise TimeoutError("Timed out waiting for initialize response on SSE stream") from e
         self._resp_map.pop(req_id, None)
 
         if "error" in env:
@@ -295,8 +307,8 @@ class SSETransport(MCPTransport):
         if not env:
             try:
                 env = self._resp_map[req_id].get(timeout=self.timeout)
-            except queue.Empty:
-                raise TimeoutError(f"Timed out waiting for response to '{method}' on SSE stream")
+            except queue.Empty as e:
+                raise TimeoutError(f"Timed out waiting for response to '{method}' on SSE stream") from e
         self._resp_map.pop(req_id, None)
 
         if "error" in env:
@@ -326,9 +338,11 @@ class SSETransport(MCPTransport):
         except Exception:
             pass
 
+
 # =========================================================
 #                    TRANSPORT CHOICE
 # =========================================================
+
 
 def probe_transport(url: str) -> str:
     cleaned = re.sub(r"#.*$", "", url)
@@ -346,22 +360,28 @@ def probe_transport(url: str) -> str:
         pass
     return "http"
 
+
 def build_transport(url: str) -> MCPTransport:
     kind = probe_transport(url)
     return SSETransport(url) if kind == "sse" else HTTPTransport(url)
+
 
 # =========================================================
 #               MCP HELPERS (transport-agnostic)
 # =========================================================
 
+
 def mcp_initialize(transport: MCPTransport) -> Dict[str, Any]:
     return transport.initialize()
+
 
 def mcp_call(transport: MCPTransport, method: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return transport.send_request(method, params)
 
+
 def mcp_notify(transport: MCPTransport, method: str, params: Optional[Dict[str, Any]]) -> None:
     return transport.send_notification(method, params)
+
 
 def try_list(transport: MCPTransport, method: str) -> Optional[List[Dict[str, Any]]]:
     """
@@ -391,8 +411,11 @@ def try_list(transport: MCPTransport, method: str) -> Optional[List[Dict[str, An
                 break
     return None
 
+
 # Optional helpers for quirky servers that document tool names in 'instructions'
 TOOL_NAME_RE = re.compile(r"`([a-zA-Z0-9_]{2,64})`")
+
+
 def tools_from_instructions(instructions: str) -> List[Dict[str, Any]]:
     if not instructions:
         return []
@@ -405,8 +428,13 @@ def tools_from_instructions(instructions: str) -> List[Dict[str, Any]]:
     seen = set()
     for n in names:
         if n not in seen:
-            uniq.append(n); seen.add(n)
-    return [{"name": n, "description": f"Discovered from instructions: `{n}`", "inputSchema": {"type": "object"}} for n in uniq]
+            uniq.append(n)
+            seen.add(n)
+    return [
+        {"name": n, "description": f"Discovered from instructions: `{n}`", "inputSchema": {"type": "object"}}
+        for n in uniq
+    ]
+
 
 def normalize_tool_args(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     a = dict(args or {})
@@ -422,12 +450,15 @@ def normalize_tool_args(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         if "url" not in a:
             for k in ("link", "href", "page_url"):
                 if k in a:
-                    a["url"] = a.pop(k); break
+                    a["url"] = a.pop(k)
+                    break
     return a
+
 
 # =========================================================
 #         OPENAI ROUTER (multi-step tool orchestration)
 # =========================================================
+
 
 def mcp_tool_to_openai_tool(t: Dict[str, Any]) -> Dict[str, Any]:
     return {
@@ -439,10 +470,13 @@ def mcp_tool_to_openai_tool(t: Dict[str, Any]) -> Dict[str, Any]:
         },
     }
 
+
 ALLOWLIST = None  # e.g., {"fetch", "list_directory"}
+
 
 def allowed_tool(name: str) -> bool:
     return (ALLOWLIST is None) or (name in ALLOWLIST)
+
 
 def choose_and_run_tool(user_text: str, transport: MCPTransport) -> str:
     if not OPENAI_API_KEY:
@@ -469,11 +503,15 @@ def choose_and_run_tool(user_text: str, transport: MCPTransport) -> str:
     # Build the initial message set (optionally hint if we see known tool names)
     sys_hint = None
     if any(n in tools_map for n in ("list_directory", "read_file", "read_text")):
-        sys_hint = ("You can use filesystem tools to list and read files. "
-                    "Plan steps and use multiple tools until you can answer.")
+        sys_hint = (
+            "You can use filesystem tools to list and read files. "
+            "Plan steps and use multiple tools until you can answer."
+        )
     elif any(n in tools_map for n in ("search_documentation", "read_documentation")):
-        sys_hint = ("Prefer 'search_documentation' then 'read_documentation' to cite sources. "
-                    "Use multiple calls if needed and stop when sufficient information is gathered.")
+        sys_hint = (
+            "Prefer 'search_documentation' then 'read_documentation' to cite sources. "
+            "Use multiple calls if needed and stop when sufficient information is gathered."
+        )
 
     messages = []
     if sys_hint:
@@ -488,7 +526,8 @@ def choose_and_run_tool(user_text: str, transport: MCPTransport) -> str:
         for name, p in by_name.items():
             txt = (name + " " + p.get("description", "")).lower()
             if any(k in txt for k in ("search", "doc", "aws", "arxiv", "query", "time", "files")):
-                chosen = name; break
+                chosen = name
+                break
         if not chosen and by_name:
             chosen = next(iter(by_name))
         if not chosen:
@@ -512,10 +551,11 @@ def choose_and_run_tool(user_text: str, transport: MCPTransport) -> str:
             tool_choice="auto" if openai_tools else "none",
         )
         msg = resp.choices[0].message
-        messages.append({"role": "assistant",
-                         "content": msg.content,
-                         "tool_calls": msg.tool_calls} if msg.tool_calls else
-                        {"role": "assistant", "content": msg.content})
+        messages.append(
+            {"role": "assistant", "content": msg.content, "tool_calls": msg.tool_calls}
+            if msg.tool_calls
+            else {"role": "assistant", "content": msg.content}
+        )
 
         # If the model answered directly, we’re done
         if not msg.tool_calls:
@@ -525,22 +565,26 @@ def choose_and_run_tool(user_text: str, transport: MCPTransport) -> str:
         for call in msg.tool_calls:
             name = call.function.name
             if not allowed_tool(name):
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "content": json.dumps({"error": f"Blocked tool '{name}' by policy."})
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": json.dumps({"error": f"Blocked tool '{name}' by policy."}),
+                    }
+                )
                 continue
 
             args_json = call.function.arguments or "{}"
             try:
                 args = json.loads(args_json)
             except Exception as e:
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "content": json.dumps({"error": f"Invalid JSON args for '{name}': {e}"})
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": json.dumps({"error": f"Invalid JSON args for '{name}': {e}"}),
+                    }
+                )
                 continue
 
             # Schema validate when available
@@ -553,11 +597,13 @@ def choose_and_run_tool(user_text: str, transport: MCPTransport) -> str:
                 try:
                     validate(instance=args, schema=schema)
                 except ValidationError as e:
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "content": json.dumps({"error": f"Tool arg validation failed for '{name}': {e.message}"})
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.id,
+                            "content": json.dumps({"error": f"Tool arg validation failed for '{name}': {e.message}"}),
+                        }
+                    )
                     continue
 
             # Call MCP tool
@@ -566,17 +612,21 @@ def choose_and_run_tool(user_text: str, transport: MCPTransport) -> str:
             except Exception as e:
                 result = {"error": f"MCP tool '{name}' call failed: {e}"}
 
-            messages.append({
-                "role": "tool",
-                "tool_call_id": call.id,
-                "content": json.dumps(result, ensure_ascii=False),
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            )
 
     return "Stopped after too many tool-call iterations (safety cap)."
+
 
 # =========================================================
 #                       RUNNER
 # =========================================================
+
 
 def run_with_autofix(url: str, ask: str) -> str:
     transport = build_transport(url)
@@ -599,12 +649,14 @@ def run_with_autofix(url: str, ask: str) -> str:
         except Exception:
             pass
 
+
 # =========================================================
 #                           CLI
 # =========================================================
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Self-correcting MCP client (HTTP + SSE + multi-step tools).")
     parser.add_argument("--url", required=True, help="MCP endpoint (HTTP or .../sse[#label])")
     parser.add_argument("--ask", required=True, help="User prompt to route to MCP tool/prompt.")
