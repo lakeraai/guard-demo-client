@@ -57,6 +57,28 @@ Validated during implementation with:
 - `python -m compileall backend`
 - `npm run build`
 
+## Uncommitted Dependency Updates
+
+The current worktree still has uncommitted dependency-file changes that were not included in the feature commit:
+
+- `requirements.txt`
+- `package.json`
+- `package-lock.json`
+
+The important backend reason for the `requirements.txt` changes was Python 3.13 compatibility. Those edits relaxed or updated a few package constraints and added `numpy`:
+
+- `sqlalchemy>=2.0.31`
+- `pydantic>=2.8,<3`
+- `pandas>=2.2.3,<3`
+- `numpy==1.26.4`
+
+Those dependency updates were intentionally left out of the fork-ready feature commit so the endpoint/admin work stayed isolated. If you want them included in the fork branch, add them as a separate dependency-compatibility commit.
+
+For the frontend files:
+
+- `package.json` only has dependency ordering/normalization changes, not intentional dependency additions or removals.
+- `package-lock.json` was refreshed after reinstalling frontend dependencies in the current environment/toolchain, which updated transitive lockfile entries.
+
 ## Push Prep
 
 Recommended push flow:
