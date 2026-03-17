@@ -1,7 +1,6 @@
+from typing import Any, Dict, List, Optional
+
 import httpx
-from typing import List, Dict, Any, Optional
-from .database import get_db
-from .models import AppConfig
 
 LAKERA_URL = "https://api.lakera.ai/v2/guard"
 
@@ -9,10 +8,11 @@ LAKERA_URL = "https://api.lakera.ai/v2/guard"
 _last_lakera_result: Optional[Dict[str, Any]] = None
 _last_lakera_request: Optional[Dict[str, Any]] = None
 
+
 async def check_interaction(
-    messages: List[Dict[str, str]], 
-    meta: Optional[Dict[str, Any]] = None, 
-    api_key: Optional[str] = None, 
+    messages: List[Dict[str, str]],
+    meta: Optional[Dict[str, Any]] = None,
+    api_key: Optional[str] = None,
     project_id: Optional[str] = None,
     system_prompt: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -24,7 +24,7 @@ async def check_interaction(
     it will be prepended to the messages sent to Lakera.
     """
     global _last_lakera_result
-    
+
     if not api_key:
         return None
 
@@ -44,39 +44,37 @@ async def check_interaction(
         "payload": True,
         "dev_info": True,
     }
-    
+
     # Debug: log the exact messages payload being sent to Lakera
     try:
         print(f"🔎 Lakera payload messages: {msgs}")
     except Exception:
         pass
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}", 
-        "Content-Type": "application/json"
-    }
-    
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
     try:
         # Store last request payload (without API key) for debugging/inspection
         global _last_lakera_request
         _last_lakera_request = {
             "messages": msgs,
             "project_id": project_id,
-            "system_prompt_included": any(m.get("role") == "system" for m in msgs)
+            "system_prompt_included": any(m.get("role") == "system" for m in msgs),
         }
 
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(LAKERA_URL, json=payload, headers=headers)
             response.raise_for_status()
             result = response.json()
-            
+
             # Store the last result for the frontend to poll
             _last_lakera_result = result
-            
+
             return result
     except Exception as e:
         print(f"Lakera API error: {e}")
         return None
+
 
 def get_last_result() -> Optional[Dict[str, Any]]:
     """

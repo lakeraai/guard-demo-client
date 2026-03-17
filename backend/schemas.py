@@ -1,6 +1,8 @@
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel
+
 
 # Config schemas
 class AppConfigBase(BaseModel):
@@ -21,6 +23,7 @@ class AppConfigBase(BaseModel):
     # UI theme: e.g. "blue", "emerald", "purple", "amber"
     theme: Optional[str] = "blue"
 
+
 class AppConfigResponse(AppConfigBase):
     id: int
     openai_api_key: Optional[str] = None
@@ -30,6 +33,7 @@ class AppConfigResponse(AppConfigBase):
     created_at: datetime
     updated_at: datetime
 
+
 class AppConfigUpdate(AppConfigBase):
     openai_api_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
@@ -38,11 +42,13 @@ class AppConfigUpdate(AppConfigBase):
     use_litellm: Optional[bool] = None
     litellm_base_url: Optional[str] = None
 
+
 # Chat schemas
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     prompt_id: Optional[int] = None
+
 
 class ChatResponse(BaseModel):
     response: str
@@ -50,18 +56,22 @@ class ChatResponse(BaseModel):
     tool_traces: Optional[List[Dict[str, Any]]] = None
     citations: Optional[List[Dict[str, Any]]] = None
 
+
 # RAG schemas
 class RagGenerateRequest(BaseModel):
     industry: str
     seed_prompt: str
     preview_only: bool = False
 
+
 class RagGenerateResponse(BaseModel):
     markdown: str
     ingested: bool = False
 
+
 class RagSearchResponse(BaseModel):
     chunks: List[Dict[str, Any]]
+
 
 # Tool schemas
 class ToolBase(BaseModel):
@@ -72,21 +82,26 @@ class ToolBase(BaseModel):
     enabled: bool = True
     config_json: Optional[Dict[str, Any]] = None
 
+
 class ToolResponse(ToolBase):
     id: int
     created_at: datetime
     updated_at: datetime
 
+
 class ToolCreate(ToolBase):
     pass
 
+
 class ToolUpdate(ToolBase):
     pass
+
 
 # Lakera schemas
 class LakeraResult(BaseModel):
     result: Dict[str, Any]
     timestamp: datetime
+
 
 # Demo Prompt schemas
 class DemoPromptBase(BaseModel):
@@ -97,20 +112,23 @@ class DemoPromptBase(BaseModel):
     is_malicious: bool = False
     preferred_llm: Optional[str] = None
 
+
 class DemoPromptResponse(DemoPromptBase):
     id: int
     usage_count: int
     created_at: datetime
     updated_at: datetime
 
+
 class DemoPromptCreate(DemoPromptBase):
     pass
 
+
 class DemoPromptUpdate(DemoPromptBase):
     pass
+
 
 class DemoPromptSearchRequest(BaseModel):
     query: str
     category: Optional[str] = None
     limit: int = 10
-

@@ -1,10 +1,10 @@
-import re
 import json
-import time
 import queue
+import re
 import threading
-from typing import Dict, Any, Optional, List, Tuple
-from urllib.parse import urljoin, urlparse, parse_qs, quote
+import time
+from typing import Any, Dict, Optional, Tuple
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 
 import requests
 
@@ -19,13 +19,16 @@ INIT_PARAMS = {
 #                        TRANSPORTS
 # =========================================================
 
+
 class MCPTransport:
     def initialize(self) -> Dict[str, Any]: ...
     def send_request(self, method: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]: ...
     def send_notification(self, method: str, params: Optional[Dict[str, Any]]) -> None: ...
     def close(self) -> None: ...
 
+
 # ----------------------- HTTP ----------------------------
+
 
 class HTTPTransport(MCPTransport):
     """
@@ -34,6 +37,7 @@ class HTTPTransport(MCPTransport):
     - Echo 'Mcp-Session-Id' after the server provides it (if any)
     - Some servers require Accept: 'application/json, text/event-stream' on POST
     """
+
     def __init__(self, base_url: str, timeout: float = 60.0):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -67,9 +71,7 @@ class HTTPTransport(MCPTransport):
                 return {"serverInfo": {"name": "Unknown Server", "version": "1.0.0"}}
             raise RuntimeError(f"HTTP {r.status_code} from {self.base_url}: {body}")
         if body.lstrip().startswith("event:"):
-            raise RuntimeError(
-                "SSE_BODY_ON_HTTP: POST returned an SSE block; use SSE transport."
-            )
+            raise RuntimeError("SSE_BODY_ON_HTTP: POST returned an SSE block; use SSE transport.")
         # Streamable HTTP (/mcp) may return SSE-style body: "data: {...}\n\n"
         if body.lstrip().startswith("data:"):
             data_lines = [line[5:].lstrip() for line in body.splitlines() if line.startswith("data:")]
@@ -80,8 +82,8 @@ class HTTPTransport(MCPTransport):
                     pass
         try:
             return r.json()
-        except Exception:
-            raise RuntimeError(f"Invalid JSON response from {self.base_url}: {body[:300]}")
+        except Exception as e:
+            raise RuntimeError(f"Invalid JSON response from {self.base_url}: {body[:300]}") from e
 
     def initialize(self) -> Dict[str, Any]:
         req = {"jsonrpc": "2.0", "id": self._next_id(), "method": "initialize", "params": INIT_PARAMS}
@@ -90,11 +92,17 @@ class HTTPTransport(MCPTransport):
         # Best-effort notification - don't fail if server doesn't support it
         try:
             print(f"🔧 Sending 'initialized' notification to {self.base_url}")
-            init_response = self.session.post(self.base_url, json={"jsonrpc": "2.0", "method": "initialized", "params": {}},
-                              timeout=self.timeout, headers=self._headers())
+            init_response = self.session.post(
+                self.base_url,
+                json={"jsonrpc": "2.0", "method": "initialized", "params": {}},
+                timeout=self.timeout,
+                headers=self._headers(),
+            )
             print(f"🔧 'initialized' response: {init_response.status_code}")
             if init_response.status_code >= 400:
-                print(f"Warning: Server doesn't support 'initialized' notification (HTTP {init_response.status_code}): {init_response.text}")
+                print(
+                    f"Warning: Server doesn't support 'initialized' notification (HTTP {init_response.status_code}): {init_response.text}"
+                )
         except Exception as e:
             # Server doesn't support initialized notification, continue anyway
             print(f"Warning: Server doesn't support 'initialized' notification: {e}")
@@ -124,7 +132,9 @@ class HTTPTransport(MCPTransport):
         except Exception:
             pass
 
+
 # ------------------------ SSE ----------------------------
+
 
 class SSETransport(MCPTransport):
     """
@@ -135,13 +145,16 @@ class SSETransport(MCPTransport):
       - Echo 'Mcp-Session-Id' on every POST; read it from endpoint query or response headers
       - Responses may arrive on SSE OR embedded as an SSE block in POST body
     """
+
     def __init__(self, sse_url: str, timeout: float = 60.0):
         self.base_url = re.sub(r"#.*$", "", sse_url.rstrip("/"))
         self._sse_fragment = (re.search(r"#(.+)$", sse_url) or [None, None])[1]
         # Pass fragment to proxy so it can route to the correct stdio server (e.g. ToolHive SSE proxy).
         # Use query param (fragment is never sent over HTTP; proxy may expect ?server=name).
         if self._sse_fragment:
-            self.base_url = self.base_url + ("&" if "?" in self.base_url else "?") + "server=" + quote(self._sse_fragment, safe="")
+            self.base_url = (
+                self.base_url + ("&" if "?" in self.base_url else "?") + "server=" + quote(self._sse_fragment, safe="")
+            )
         self.timeout = timeout
         self.session = requests.Session()
         self.session_id: Optional[str] = None
@@ -194,8 +207,7 @@ class SSETransport(MCPTransport):
                 get_headers = {"Accept": "text/event-stream"}
                 if getattr(self, "_sse_fragment", None):
                     get_headers["X-MCP-Server"] = self._sse_fragment
-                r = self.session.get(self.base_url, stream=True, timeout=None,
-                                    headers=get_headers)
+                r = self.session.get(self.base_url, stream=True, timeout=None, headers=get_headers)
             except Exception as e:
                 self._stream_error = e
                 return
@@ -306,8 +318,8 @@ class SSETransport(MCPTransport):
         if not env:
             try:
                 env = self._resp_map[req_id].get(timeout=self.timeout)
-            except queue.Empty:
-                raise TimeoutError(f"Timed out waiting for response to 'initialize' on SSE stream")
+            except queue.Empty as e:
+                raise TimeoutError("Timed out waiting for response to 'initialize' on SSE stream") from e
         self._resp_map.pop(req_id, None)
 
         if "error" in env:
@@ -345,12 +357,11 @@ class SSETransport(MCPTransport):
             raise RuntimeError(f"HTTP {r.status_code} posting '{method}': {r.text}")
 
         env = self._parse_post_body_as_jsonrpc(r.text)
-        from_body = env is not None
         if not env:
             try:
                 env = self._resp_map[req_id].get(timeout=self.timeout)
-            except queue.Empty:
-                raise TimeoutError(f"Timed out waiting for response to '{method}' on SSE stream")
+            except queue.Empty as e:
+                raise TimeoutError(f"Timed out waiting for response to '{method}' on SSE stream") from e
         self._resp_map.pop(req_id, None)
 
         if "error" in env:
@@ -362,7 +373,7 @@ class SSETransport(MCPTransport):
         note = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             note["params"] = params
-        r = self.session.post(self._post_target(), json=note, timeout=self.timeout, headers=self._headers())
+        _ = self.session.post(self._post_target(), json=note, timeout=self.timeout, headers=self._headers())
 
     def close(self) -> None:
         self._stream_stop.set()
@@ -373,9 +384,11 @@ class SSETransport(MCPTransport):
         except Exception:
             pass
 
+
 # =========================================================
 #                        HELPERS
 # =========================================================
+
 
 def probe_transport(url: str) -> str:
     """Probe URL to determine transport type"""
@@ -394,26 +407,32 @@ def probe_transport(url: str) -> str:
         pass
     return "http"
 
+
 def build_transport(url: str) -> MCPTransport:
     """Build appropriate transport for URL"""
     kind = probe_transport(url)
     return SSETransport(url) if kind == "sse" else HTTPTransport(url)
 
+
 # =========================================================
 #               MCP HELPERS (transport-agnostic)
 # =========================================================
+
 
 def mcp_initialize(transport: MCPTransport) -> Dict[str, Any]:
     """Initialize MCP connection"""
     return transport.initialize()
 
+
 def mcp_call(transport: MCPTransport, method: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Make MCP call"""
     return transport.send_request(method, params)
 
+
 def mcp_notify(transport: MCPTransport, method: str, params: Optional[Dict[str, Any]]) -> None:
     """Send MCP notification"""
     return transport.send_notification(method, params)
+
 
 def try_list(transport: MCPTransport, method: str) -> Dict[str, Any]:
     """
