@@ -1,6 +1,9 @@
 import os
 
 os.environ["CHROMA_TELEMETRY_ENABLED"] = "false"
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
+
+import logging
 
 import csv
 import json
@@ -15,6 +18,9 @@ from .database import get_db
 from .lakera import check_interaction
 from .models import AppConfig, RagSource
 from .openai_client import openai_client
+
+logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)
+logging.getLogger("chromadb.telemetry.product.posthog").propagate = False
 
 # Global variables to store RAG scanning results and progress
 _last_rag_scanning_result: Optional[Dict[str, Any]] = None
@@ -524,7 +530,9 @@ Constraints: {options.get("constraints", "")}
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
         response = openai_client.chat_completion(
-            messages=messages, model=config.openai_model, temperature=float(config.temperature) / 10.0
+            messages=messages,
+            model=config.llm_model or config.openai_model,
+            temperature=float(config.temperature) / 10.0,
         )
 
         markdown = response["choices"][0]["message"]["content"]

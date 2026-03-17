@@ -11,6 +11,7 @@ from .openai_client import openai_client
 class AgentRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    model_override: Optional[str] = None
 
 
 class AgentResult(BaseModel):
@@ -22,7 +23,7 @@ class AgentResult(BaseModel):
 
 async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResult:
     """
-    Main orchestrator function that coordinates RAG, tools, and OpenAI
+    Main orchestrator function that coordinates RAG, tools, and the configured LLM endpoint
     """
     # Step 0: Check user input with Lakera if enabled (pre-response check)
     lakera_api_key = cfg.lakera_api_key if cfg.lakera_enabled else None
@@ -68,9 +69,9 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
             if doc.get("metadata", {}).get("source") and doc.get("metadata", {}).get("source") != "unknown"
         ]
 
-    # Step 2: Get tools manifest for OpenAI
+    # Step 2: Get tools manifest for the configured OpenAI-compatible endpoint
     tools_manifest = toolhive.openai_tools_manifest(db)
-    # Step 3: Prepare messages for OpenAI
+    # Step 3: Prepare messages for the LLM
     messages = []
 
     # Add system prompt
@@ -83,15 +84,18 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
         messages.append({"role": "system", "content": f"Context information:\n{context_text}"})
 
     # Add user message
-    messages.append({"role": "user", "content": req.message})  # Step 4: Call OpenAI with tools
+    messages.append({"role": "user", "content": req.message})  # Step 4: Call the LLM with tools
     try:
-        # Reload config to get latest API key
+        # Reload config to get the latest LLM settings
         openai_client._load_config()
+        active_model = req.model_override or cfg.llm_model or cfg.openai_model
+        openai_client.model = active_model
+        print(f"🤖 Chat model selected: {active_model}")
 
-        # First call to OpenAI with tools manifest
+        # First call to the LLM with tools manifest
         response = openai_client.chat_completion(
             messages=messages,
-            model=cfg.openai_model,
+            model=active_model,
             temperature=cfg.temperature,
             tools=tools_manifest if tools_manifest else None,
         )
@@ -161,10 +165,10 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
                 # Add to tool traces
                 tool_traces.append({"id": tool_call_id, "name": tool_name, "args": parsed_args, "result": tool_result})
 
-            # Make second call to OpenAI with tool results
-            print("🔧 Making follow-up call to OpenAI with tool results")
+            # Make second call to the LLM with tool results
+            print("🔧 Making follow-up call to the LLM with tool results")
             final_response = openai_client.chat_completion(
-                messages=messages, model=cfg.openai_model, temperature=cfg.temperature
+                messages=messages, model=active_model, temperature=cfg.temperature
             )
 
             # Get final response
