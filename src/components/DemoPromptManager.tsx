@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, Tag, Shield, ShieldAlert } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Tag, ShieldAlert } from 'lucide-react';
 import { DemoPrompt, DemoPromptCreate, DemoPromptUpdate } from '../types';
 import { apiService } from '../services/api';
 
@@ -149,7 +149,9 @@ const DemoPromptManager: React.FC = () => {
                     <div className="flex items-center space-x-2 mb-2">
                       <h3 className="font-medium text-gray-900">{prompt.title}</h3>
                       {prompt.is_malicious && (
-                        <ShieldAlert className="w-4 h-4 text-red-500" title="Malicious prompt" />
+                        <span title="Malicious prompt">
+                          <ShieldAlert className="w-4 h-4 text-red-500" />
+                        </span>
                       )}
                       <span className={`px-2 py-1 text-xs rounded-full ${
                         prompt.category === 'security' ? 'bg-red-100 text-red-800' :
@@ -228,7 +230,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ prompt, onSave, onCancel }) => 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   useEffect(() => {
-    apiService.getModels().then((res) => setAvailableModels(res.models || [])).catch(() => {});
+    apiService.getModels('chat').then((res) => setAvailableModels(res.models || [])).catch(() => {});
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -327,20 +329,20 @@ const PromptForm: React.FC<PromptFormProps> = ({ prompt, onSave, onCancel }) => 
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Preferred LLM
             </label>
-            <select
+            <input
+              list="prompt-model-options"
               value={formData.preferred_llm ?? ''}
               onChange={(e) => setFormData(prev => ({ ...prev, preferred_llm: e.target.value || undefined }))}
+              placeholder="Optional model override"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">None</option>
+            />
+            <datalist id="prompt-model-options">
               {availableModels.map((model) => (
-                <option key={model} value={model}>
-                  {model.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                </option>
+                <option key={model} value={model} />
               ))}
-            </select>
+            </datalist>
             <p className="text-xs text-gray-500 mt-1">
-              When this prompt is used from the chatbot, the demo will switch to this model first (optional).
+              Optional per-prompt model override. Use a model/deployment that is valid for the currently configured provider and endpoint.
             </p>
           </div>
 

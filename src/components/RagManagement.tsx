@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Trash2, FileText, Sparkles, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -21,11 +21,7 @@ export interface RagManagementRef {
   refresh: () => void;
 }
 
-const RagManagement = forwardRef<RagManagementRef, RagManagementProps>(({ 
-  onUploadStart,
-  onUploadComplete, 
-  onGenerateComplete 
-}, ref) => {
+const RagManagement = forwardRef<RagManagementRef, RagManagementProps>((_props, ref) => {
   const [sources, setSources] = useState<RagSource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isClearing, setIsClearing] = useState(false);

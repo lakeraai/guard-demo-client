@@ -15,6 +15,13 @@ class AppConfigBase(BaseModel):
     lakera_blocking_mode: bool = False
     rag_content_scanning: bool = False
     rag_lakera_project_id: Optional[str] = None
+    llm_provider: str = "openai"
+    llm_base_url: Optional[str] = None
+    llm_embedding_base_url: Optional[str] = None
+    llm_api_version: Optional[str] = None
+    llm_embedding_api_version: Optional[str] = None
+    llm_model: str = "gpt-4o-mini"
+    llm_embedding_model: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
     temperature: int = 7
     system_prompt: Optional[str] = None
@@ -24,6 +31,7 @@ class AppConfigBase(BaseModel):
 
 class AppConfigResponse(AppConfigBase):
     id: int
+    llm_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
@@ -33,6 +41,7 @@ class AppConfigResponse(AppConfigBase):
 
 
 class AppConfigUpdate(AppConfigBase):
+    llm_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None

@@ -12,7 +12,8 @@ import {
   DemoPrompt,
   DemoPromptCreate,
   DemoPromptUpdate,
-  DemoPromptSearchResponse
+  DemoPromptSearchResponse,
+  ModelsResponse
 } from '../types';
 
 const API_BASE = '/api';
@@ -85,7 +86,7 @@ class ApiService {
   }
 
   // RAG endpoints
-  async uploadFile(file: File): Promise<{ message: string }> {
+  async uploadFile(file: File): Promise<{ message: string; filename?: string; result?: { chunks?: number; blocked_chunks?: number } }> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -210,10 +211,9 @@ class ApiService {
   }
 
   // Models endpoint
-  async getModels(): Promise<{ models: string[] }> {
-    return this.request<{ models: string[] }>('/models');
+  async getModels(target: 'chat' | 'embedding' = 'chat'): Promise<ModelsResponse> {
+    return this.request<ModelsResponse>(`/models?target=${encodeURIComponent(target)}`);
   }
 }
 
 export const apiService = new ApiService();
-

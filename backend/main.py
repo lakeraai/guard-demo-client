@@ -72,8 +72,42 @@ def _migrate_app_config_theme():
             conn.commit()
 
 
+def _migrate_app_config_llm_fields():
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        migrations = {
+            "llm_provider": "ALTER TABLE app_config ADD COLUMN llm_provider VARCHAR",
+            "llm_base_url": "ALTER TABLE app_config ADD COLUMN llm_base_url VARCHAR",
+            "llm_embedding_base_url": "ALTER TABLE app_config ADD COLUMN llm_embedding_base_url VARCHAR",
+            "llm_api_version": "ALTER TABLE app_config ADD COLUMN llm_api_version VARCHAR",
+            "llm_embedding_api_version": "ALTER TABLE app_config ADD COLUMN llm_embedding_api_version VARCHAR",
+            "llm_api_key": "ALTER TABLE app_config ADD COLUMN llm_api_key VARCHAR",
+            "llm_model": "ALTER TABLE app_config ADD COLUMN llm_model VARCHAR",
+            "llm_embedding_model": "ALTER TABLE app_config ADD COLUMN llm_embedding_model VARCHAR",
+        }
+        changed = False
+        for column, statement in migrations.items():
+            if column not in columns:
+                conn.execute(text(statement))
+                changed = True
+
+        if changed:
+            conn.execute(text("UPDATE app_config SET llm_provider = COALESCE(llm_provider, 'openai')"))
+            conn.execute(text("UPDATE app_config SET llm_api_key = COALESCE(llm_api_key, openai_api_key)"))
+            conn.execute(text("UPDATE app_config SET llm_model = COALESCE(llm_model, openai_model, 'gpt-4o-mini')"))
+            conn.execute(
+                text(
+                    "UPDATE app_config SET llm_embedding_model = COALESCE(llm_embedding_model, 'text-embedding-3-small') "
+                    "WHERE COALESCE(llm_provider, 'openai') = 'openai'"
+                )
+            )
+            conn.commit()
+
+
 _migrate_demo_prompts_preferred_llm()
 _migrate_app_config_theme()
+_migrate_app_config_llm_fields()
 
 app = FastAPI(title="Agentic Demo API", description="Backend API for the Agentic Demo application", version="1.0.0")
 
@@ -121,6 +155,12 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
     for field, value in config_update.dict(exclude_unset=True).items():
         setattr(config, field, value)
 
+    provider = (config.llm_provider or "openai").lower()
+    if config.llm_api_key and provider == "openai":
+        config.openai_api_key = config.llm_api_key
+    if config.llm_model and provider == "openai":
+        config.openai_model = config.llm_model
+
     db.commit()
     db.refresh(config)
     return config
@@ -129,10 +169,21 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
 # Export sections: which config fields belong to which section (for selective export/import)
 EXPORT_SECTIONS = {
     "appearance": ["business_name", "tagline", "hero_text", "hero_image_url", "logo_url", "theme"],
-    "llm": ["openai_model", "temperature", "system_prompt"],
+    "llm": [
+                        "llm_provider",
+                        "llm_base_url",
+                        "llm_embedding_base_url",
+                        "llm_api_version",
+                        "llm_embedding_api_version",
+                        "llm_model",
+                        "llm_embedding_model",
+                        "openai_model",
+        "temperature",
+        "system_prompt",
+    ],
     "security": ["lakera_enabled", "lakera_blocking_mode"],
     "rag_scanning": ["rag_content_scanning"],
-    "api_keys": ["openai_api_key", "lakera_api_key"],
+    "api_keys": ["llm_api_key", "openai_api_key", "lakera_api_key"],
     "project_ids": ["lakera_project_id", "rag_lakera_project_id"],
 }
 SAFE_DEFAULT_INCLUDE = ["appearance", "llm", "security", "rag_scanning", "demo_prompts", "tools", "rag"]
@@ -304,6 +355,14 @@ async def import_config(file: UploadFile = File(...), db: Session = Depends(get_
                     config_data = json.load(f)
                 db.query(AppConfig).delete()
                 new_config = AppConfig(
+                    llm_provider=config_data.get("llm_provider", "openai"),
+                    llm_base_url=config_data.get("llm_base_url"),
+                    llm_embedding_base_url=config_data.get("llm_embedding_base_url"),
+                    llm_api_version=config_data.get("llm_api_version"),
+                    llm_embedding_api_version=config_data.get("llm_embedding_api_version"),
+                    llm_api_key=config_data.get("llm_api_key") or config_data.get("openai_api_key"),
+                    llm_model=config_data.get("llm_model") or config_data.get("openai_model", "gpt-4o-mini"),
+                    llm_embedding_model=config_data.get("llm_embedding_model"),
                     openai_api_key=config_data.get("openai_api_key"),
                     lakera_api_key=config_data.get("lakera_api_key"),
                     lakera_project_id=config_data.get("lakera_project_id"),
@@ -572,17 +631,24 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     if not config:
         raise HTTPException(status_code=500, detail="No configuration found")
 
-    # If sent from a demo prompt suggestion with a preferred LLM, switch model permanently
+    selected_model = config.llm_model or config.openai_model
+
+    # If sent from a demo prompt suggestion with a preferred LLM, use it for this request only
     if request.prompt_id:
         demo_prompt = db.query(DemoPrompt).filter(DemoPrompt.id == request.prompt_id).first()
         if demo_prompt and demo_prompt.preferred_llm:
-            valid_models = openai_client.get_models()
+            valid_models = set(openai_client.get_models(target="chat"))
+            valid_models.add(selected_model)
             if demo_prompt.preferred_llm in valid_models:
-                config.openai_model = demo_prompt.preferred_llm
-                db.commit()
+                selected_model = demo_prompt.preferred_llm
+            else:
+                print(
+                    f"ℹ️ Ignoring prompt override '{demo_prompt.preferred_llm}' for provider "
+                    f"'{config.llm_provider or 'openai'}'; using '{selected_model}' instead"
+                )
 
     # Create agent request
-    agent_request = AgentRequest(message=request.message, session_id=request.session_id)
+    agent_request = AgentRequest(message=request.message, session_id=request.session_id, model_override=selected_model)
 
     # Run agent
     result = await run_agent(agent_request, config, db)
@@ -1072,10 +1138,11 @@ async def get_rag_scanning_progress():
 
 
 @app.get("/api/models")
-async def get_available_models():
-    """Get available OpenAI models"""
+async def get_available_models(target: str = "chat"):
+    """Get available models for the configured OpenAI-compatible endpoint."""
     try:
-        models = openai_client.get_models()
-        return {"models": models}
+        if target not in {"chat", "embedding"}:
+            raise HTTPException(status_code=400, detail="target must be 'chat' or 'embedding'")
+        return openai_client.get_models_metadata(target=target)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}") from e

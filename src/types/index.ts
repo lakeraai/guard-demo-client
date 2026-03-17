@@ -12,6 +12,14 @@ export interface AppConfig {
   rag_content_scanning: boolean;
   rag_lakera_project_id?: string;
   lakera_project_id?: string;
+  llm_provider: string;
+  llm_base_url?: string;
+  llm_embedding_base_url?: string;
+  llm_api_version?: string;
+  llm_embedding_api_version?: string;
+  llm_model: string;
+  llm_embedding_model?: string;
+  llm_api_key?: string;
   openai_model: string;
   temperature: number;
   system_prompt?: string;
@@ -32,6 +40,14 @@ export interface AppConfigUpdate {
   lakera_blocking_mode: boolean;
   rag_content_scanning: boolean;
   rag_lakera_project_id?: string;
+  llm_provider: string;
+  llm_base_url?: string;
+  llm_embedding_base_url?: string;
+  llm_api_version?: string;
+  llm_embedding_api_version?: string;
+  llm_model: string;
+  llm_embedding_model?: string;
+  llm_api_key?: string;
   openai_model: string;
   temperature: number;
   system_prompt?: string;
@@ -162,6 +178,14 @@ export interface DemoPromptSearchResponse {
   suggestions: DemoPromptSuggestion[];
 }
 
+export interface ModelsResponse {
+  provider: string;
+  target: 'chat' | 'embedding';
+  models: string[];
+  supports_manual_entry: boolean;
+  source: string;
+}
+
 // Detector labels mapping
 export const DETECTOR_LABELS: Record<string, string> = {
   "prompt_attack": "Prompt Attack",
@@ -178,4 +202,3 @@ export const DETECTOR_LABELS: Record<string, string> = {
   "pii/ip_address": "PII: IP Address",
   "pii/us_social_security_number": "PII: SSN"
 };
-

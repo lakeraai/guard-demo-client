@@ -248,13 +248,13 @@ async def execute_mcp_tool(
     tool: Dict[str, Any], args: Dict[str, Any], db: Session, function_name: str
 ) -> Dict[str, Any]:
     """
-    Execute an MCP tool using our existing OpenAI client and MCP transport
+    Execute an MCP tool using the configured OpenAI-compatible client and MCP transport
     """
     try:
         endpoint = tool["endpoint"]
         print(f"🔧 Executing MCP tool: {tool['name']} at {endpoint}")
 
-        # Use our existing OpenAI client
+        # Use our existing OpenAI-compatible client
         from .mcp import build_transport, mcp_call, mcp_initialize, try_list
         from .openai_client import openai_client
 
@@ -264,9 +264,9 @@ async def execute_mcp_tool(
         if not openai_client.client:
             return {
                 "status": "error",
-                "error": "OpenAI client not configured",
+                "error": "LLM client not configured",
                 "tool_name": tool["name"],
-                "details": "Please configure the OpenAI API key in the admin interface",
+                "details": "Please configure the LLM settings in the admin interface",
             }
 
         # Build the appropriate transport (HTTP or SSE)
@@ -827,7 +827,7 @@ async def execute_mcp_tool_multi_step(
         endpoint = tool["endpoint"]
         print(f"🔧 Executing MCP tool (multi-step): {tool['name']} at {endpoint}")
 
-        # Use our existing OpenAI client
+        # Use our existing OpenAI-compatible client
         from .mcp import (
             HTTPTransport,
             SSETransport,
@@ -844,9 +844,9 @@ async def execute_mcp_tool_multi_step(
         if not openai_client.client:
             return {
                 "status": "error",
-                "error": "OpenAI client not configured",
+                "error": "LLM client not configured",
                 "tool_name": tool["name"],
-                "details": "Please configure the OpenAI API key in the admin interface",
+                "details": "Please configure the LLM settings in the admin interface",
             }
 
         # Build the appropriate transport (HTTP or SSE)
@@ -905,12 +905,13 @@ async def execute_mcp_tool_multi_step(
 
             # Multi-step tool loop (like mcp_example2.py)
             max_loops = 12  # prevent infinite loops
+            active_model = openai_client.model
             while max_loops > 0:
                 max_loops -= 1
 
                 # Get OpenAI response
                 resp = openai_client.client.chat.completions.create(
-                    model=openai_client.model, messages=messages, tools=openai_tools, tool_choice="auto"
+                    model=active_model, messages=messages, tools=openai_tools, tool_choice="auto"
                 )
 
                 msg = resp.choices[0].message
