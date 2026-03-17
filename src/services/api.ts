@@ -46,15 +46,21 @@ class ApiService {
     });
   }
 
-  async exportConfig(): Promise<Blob> {
-    const response = await fetch(`${API_BASE}/config/export`);
+  async exportConfig(include?: string[]): Promise<Blob> {
+    const params = new URLSearchParams();
+    params.set('version', '2'); // always request v2 export (metadata.version 2.0, includes demo_prompts.json)
+    if (include && include.length > 0) {
+      params.set('include', include.join(','));
+    }
+    const url = `${API_BASE}/config/export?${params.toString()}`;
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error('Export failed');
     }
     return response.blob();
   }
 
-  async importConfig(file: File): Promise<{ message: string }> {
+  async importConfig(file: File): Promise<{ message: string; imported_at?: string; metadata?: { includes?: string[]; version?: string } }> {
     const formData = new FormData();
     formData.append('file', file);
 

@@ -17,8 +17,9 @@ _last_rag_scanning_result: Optional[Dict[str, Any]] = None
 _rag_scanning_progress: Optional[Dict[str, Any]] = None
 
 # Initialize ChromaDB
+_chroma_export_path = "./data/chroma"
 chroma_client = chromadb.PersistentClient(
-    path="./data/chroma",
+    path=_chroma_export_path,
     settings=Settings(
         anonymized_telemetry=False,  # disables telemetry
         allow_reset=True
@@ -29,66 +30,41 @@ collection = chroma_client.get_or_create_collection(
     metadata={"hnsw:space": "cosine"}
 )
 
-def reinitialize_chromadb():
-    """Reinitialize ChromaDB client and collection after import"""
-    global chroma_client, collection
+
+def get_chroma_export_path() -> str:
+    """Path to the current ChromaDB data directory (for export zip)."""
+    return _chroma_export_path
+
+
+def reinitialize_chromadb(path: Optional[str] = None):
+    """Reinitialize ChromaDB client and collection after import. On failure, leaves existing client unchanged.
+    path: directory to use (e.g. 'data/chroma_import' after import); if None, uses './data/chroma'."""
+    global chroma_client, collection, _chroma_export_path
+    chroma_path = path if path else "./data/chroma"
     try:
-        # Close existing client if possible
-        if 'chroma_client' in globals() and chroma_client is not None:
-            try:
-                # ChromaDB doesn't have an explicit close method, but we can try to clean up
-                pass
-            except:
-                pass
-        
-        # Create new client with explicit settings to avoid tenant issues
-        chroma_client = chromadb.PersistentClient(
-            path="./data/chroma",
+        new_client = chromadb.PersistentClient(
+            path=chroma_path,
             settings=Settings(
-                anonymized_telemetry=False,  # disables telemetry
+                anonymized_telemetry=False,
                 allow_reset=True
             )
         )
-        
-        # Try to get existing collection first, then create if needed
         try:
-            collection = chroma_client.get_collection(name="agentic_demo")
-            print("🔄 ChromaDB client reinitialized with existing collection")
-        except:
-            # Collection doesn't exist, create it
-            collection = chroma_client.create_collection(
+            new_collection = new_client.get_collection(name="agentic_demo")
+        except Exception:
+            new_collection = new_client.create_collection(
                 name="agentic_demo",
                 metadata={"hnsw:space": "cosine"}
             )
-            print("🔄 ChromaDB client reinitialized with new collection")
-        
-        # Test the connection
-        try:
-            count = collection.count()
-            print(f"🔄 ChromaDB reinitialized successfully with {count} documents")
-        except Exception as e:
-            print(f"⚠️ ChromaDB reinitialized but connection test failed: {e}")
-            
+        # Verify we can use it before replacing globals
+        new_collection.count()
+        chroma_client = new_client
+        collection = new_collection
+        _chroma_export_path = chroma_path
+        print("🔄 ChromaDB reinitialized successfully")
     except Exception as e:
-        print(f"❌ Failed to reinitialize ChromaDB: {e}")
-        # Fallback: try to create a new client anyway
-        try:
-            chroma_client = chromadb.PersistentClient(
-                path="./data/chroma",
-                settings=Settings(
-                    anonymized_telemetry=False,  # disables telemetry
-                    allow_reset=True
-                )
-            )
-            collection = chroma_client.get_or_create_collection(
-                name="agentic_demo",
-                metadata={"hnsw:space": "cosine"}
-            )
-            print("🔄 ChromaDB fallback reinitialization successful")
-        except Exception as e2:
-            print(f"❌ ChromaDB fallback reinitialization also failed: {e2}")
-            # Don't raise - just log the error and continue
-            print("ℹ️ ChromaDB will be reinitialized on next application restart")
+        print(f"ℹ️ ChromaDB reinitialization skipped ({e}); new data will be used after application restart.")
+        # Do not overwrite chroma_client/collection so the app keeps using the previous client
 
 def chunk_text(text: str, chunk_size: int = 800, overlap: int = 200) -> List[str]:
     """Split text into overlapping chunks (fallback for unknown file types)"""
@@ -448,7 +424,8 @@ async def scan_chunk_content(chunk_text: str, config: AppConfig) -> Tuple[bool, 
         result = await check_interaction(
             messages=messages,
             api_key=config.lakera_api_key,
-            project_id=project_id
+            project_id=project_id,
+            system_prompt=config.system_prompt
         )
         print(f"🔍 Lakera result: {result}")
         

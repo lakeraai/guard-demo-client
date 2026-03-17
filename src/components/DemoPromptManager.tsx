@@ -221,14 +221,23 @@ const PromptForm: React.FC<PromptFormProps> = ({ prompt, onSave, onCancel }) => 
     category: prompt?.category || 'general',
     tags: prompt?.tags || [],
     is_malicious: prompt?.is_malicious || false,
+    preferred_llm: prompt?.preferred_llm ?? undefined,
   });
 
   const [tagInput, setTagInput] = useState('');
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiService.getModels().then((res) => setAvailableModels(res.models || [])).catch(() => {});
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim() || !formData.content.trim()) return;
-    onSave(formData);
+    onSave({
+      ...formData,
+      preferred_llm: formData.preferred_llm || null,
+    });
   };
 
   const addTag = () => {
@@ -312,6 +321,27 @@ const PromptForm: React.FC<PromptFormProps> = ({ prompt, onSave, onCancel }) => 
                 Mark as malicious
               </label>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Preferred LLM
+            </label>
+            <select
+              value={formData.preferred_llm ?? ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, preferred_llm: e.target.value || undefined }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">None</option>
+              {availableModels.map((model) => (
+                <option key={model} value={model}>
+                  {model.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              When this prompt is used from the chatbot, the demo will switch to this model first (optional).
+            </p>
           </div>
 
           <div>

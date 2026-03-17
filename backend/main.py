@@ -22,6 +22,7 @@ logging.basicConfig(
     ]
 )
 
+from sqlalchemy import text
 from .database import get_db, engine
 from .models import Base, AppConfig, Tool, RagSource, MCPToolCapabilities, DemoPrompt
 from .schemas import (
@@ -39,7 +40,6 @@ from . import llm_client
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-
 def _migrate_app_config_litellm():
     """Add use_litellm and litellm_base_url to app_config if missing (existing DBs)"""
     with engine.connect() as conn:
@@ -53,7 +53,31 @@ def _migrate_app_config_litellm():
             conn.commit()
 
 
+# Migration: add preferred_llm to demo_prompts if missing (existing DBs)
+def _migrate_demo_prompts_preferred_llm():
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(demo_prompts)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "preferred_llm" not in columns:
+            conn.execute(text("ALTER TABLE demo_prompts ADD COLUMN preferred_llm VARCHAR"))
+            conn.commit()
+
+
+# Migration: add theme to app_config if missing (for UI theming)
+def _migrate_app_config_theme():
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "theme" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN theme VARCHAR"))
+            # Set a sensible default for existing rows
+            conn.execute(text("UPDATE app_config SET theme = 'blue' WHERE theme IS NULL"))
+            conn.commit()
+
+
 _migrate_app_config_litellm()
+_migrate_demo_prompts_preferred_llm()
+_migrate_app_config_theme()
 
 app = FastAPI(
     title="Agentic Demo API",
@@ -115,291 +139,419 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
     db.refresh(config)
     return config
 
+# Export sections: which config fields belong to which section (for selective export/import)
+EXPORT_SECTIONS = {
+    "appearance": ["business_name", "tagline", "hero_text", "hero_image_url", "logo_url", "theme"],
+    "llm": ["openai_model", "temperature", "system_prompt", "use_litellm", "litellm_base_url"],
+    "security": ["lakera_enabled", "lakera_blocking_mode"],
+    "rag_scanning": ["rag_content_scanning"],
+    "api_keys": ["openai_api_key", "lakera_api_key"],
+    "project_ids": ["lakera_project_id", "rag_lakera_project_id"],
+}
+SAFE_DEFAULT_INCLUDE = ["appearance", "llm", "security", "rag_scanning", "demo_prompts", "tools", "rag"]
+
 @app.get("/api/config/export")
-async def export_config(db: Session = Depends(get_db)):
-    """Export complete configuration as a zip file"""
+async def export_config(include: Optional[str] = None, version: Optional[str] = None, db: Session = Depends(get_db)):
+    """Export configuration as a zip file (v2.0 format with metadata.json and section includes).
+    Query params: include=appearance,llm,... (comma-separated; omit = safe default); version=2 (UI sends this to request v2 export)."""
     try:
-        # Create in-memory zip file
+        # Parse include list; empty or missing = safe default
+        if include and include.strip():
+            included_sections = [s.strip() for s in include.split(",") if s.strip()]
+        else:
+            included_sections = list(SAFE_DEFAULT_INCLUDE)
+        if not included_sections:
+            included_sections = list(SAFE_DEFAULT_INCLUDE)
+
+        config = db.query(AppConfig).first()
+        config_dict = {}
+        if config:
+            for section, fields in EXPORT_SECTIONS.items():
+                if section not in included_sections:
+                    continue
+                for field in fields:
+                    val = getattr(config, field, None)
+                    if hasattr(val, "isoformat"):
+                        val = val.isoformat() if val else None
+                    config_dict[field] = val
+            # Timestamps for reference (not section-gated)
+            config_dict["created_at"] = config.created_at.isoformat() if config.created_at else None
+            config_dict["updated_at"] = config.updated_at.isoformat() if config.updated_at else None
+
         zip_buffer = io.BytesIO()
-        
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Export AppConfig
-            config = db.query(AppConfig).first()
-            if config:
-                config_dict = {
-                    "id": config.id,
-                    "openai_api_key": config.openai_api_key,
-                    "lakera_api_key": config.lakera_api_key,
-                    "lakera_project_id": config.lakera_project_id,
-                    "business_name": config.business_name,
-                    "tagline": config.tagline,
-                    "hero_text": config.hero_text,
-                    "hero_image_url": config.hero_image_url,
-                    "logo_url": config.logo_url,
-                    "system_prompt": config.system_prompt,
-                    "openai_model": config.openai_model,
-                    "temperature": config.temperature,
-                    "lakera_enabled": config.lakera_enabled,
-                    "lakera_blocking_mode": config.lakera_blocking_mode,
-                    "use_litellm": getattr(config, "use_litellm", False),
-                    "litellm_base_url": getattr(config, "litellm_base_url", None),
-                    "created_at": config.created_at.isoformat() if config.created_at else None,
-                    "updated_at": config.updated_at.isoformat() if config.updated_at else None
-                }
-                zip_file.writestr("config.json", json.dumps(config_dict, indent=2))
-            
-            # Export Tools and their capabilities
-            tools = db.query(Tool).all()
-            tools_data = []
-            for tool in tools:
-                tool_dict = {
-                    "id": tool.id,
-                    "name": tool.name,
-                    "type": tool.type,
-                    "description": tool.description,
-                    "endpoint": tool.endpoint,
-                    "enabled": tool.enabled,
-                    "config_json": tool.config_json,
-                    "created_at": tool.created_at.isoformat() if tool.created_at else None,
-                    "updated_at": tool.updated_at.isoformat() if tool.updated_at else None
-                }
-                
-                # Get MCP capabilities for this tool
-                capabilities = db.query(MCPToolCapabilities).filter(MCPToolCapabilities.tool_id == tool.id).first()
-                if capabilities:
-                    tool_dict["mcp_capabilities"] = {
-                        "id": capabilities.id,
-                        "tool_name": capabilities.tool_name,
-                        "server_name": capabilities.server_name,
-                        "session_info": capabilities.session_info,
-                        "discovery_results": capabilities.discovery_results,
-                        "last_discovered": capabilities.last_discovered.isoformat() if capabilities.last_discovered else None,
-                        "created_at": capabilities.created_at.isoformat() if capabilities.created_at else None,
-                        "updated_at": capabilities.updated_at.isoformat() if capabilities.updated_at else None
+            zip_file.writestr("config.json", json.dumps(config_dict, indent=2))
+
+            if "tools" in included_sections:
+                tools = db.query(Tool).all()
+                tools_data = []
+                for tool in tools:
+                    tool_dict = {
+                        "id": tool.id,
+                        "name": tool.name,
+                        "type": tool.type,
+                        "description": tool.description,
+                        "endpoint": tool.endpoint,
+                        "enabled": tool.enabled,
+                        "config_json": tool.config_json,
+                        "created_at": tool.created_at.isoformat() if tool.created_at else None,
+                        "updated_at": tool.updated_at.isoformat() if tool.updated_at else None
                     }
-                
-                tools_data.append(tool_dict)
-            
-            zip_file.writestr("tools.json", json.dumps(tools_data, indent=2))
-            
-            # Export RAG sources
-            rag_sources = db.query(RagSource).all()
-            rag_data = []
-            for source in rag_sources:
-                rag_dict = {
-                    "id": source.id,
-                    "name": source.name,
-                    "content": source.content,
-                    "chunks_count": source.chunks_count,
-                    "source_type": source.source_type,
-                    "created_at": source.created_at.isoformat() if source.created_at else None,
-                    "updated_at": source.updated_at.isoformat() if source.updated_at else None
-                }
-                rag_data.append(rag_dict)
-            
-            zip_file.writestr("rag_sources.json", json.dumps(rag_data, indent=2))
-            
-            # Export ChromaDB instead of uploads directory
-            chroma_dir = "data/chroma"
-            if os.path.exists(chroma_dir):
-                for root, dirs, files in os.walk(chroma_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        # Create relative path within zip, preserving the chroma structure
-                        arcname = os.path.relpath(file_path, ".")
-                        zip_file.write(file_path, arcname)
-            
-            # Also export the main database file
-            db_file = "data/agentic_demo.db"
-            if os.path.exists(db_file):
-                zip_file.write(db_file, "data/agentic_demo.db")
-            
-            # Add metadata
+                    capabilities = db.query(MCPToolCapabilities).filter(MCPToolCapabilities.tool_id == tool.id).first()
+                    if capabilities:
+                        tool_dict["mcp_capabilities"] = {
+                            "id": capabilities.id,
+                            "tool_name": capabilities.tool_name,
+                            "server_name": capabilities.server_name,
+                            "session_info": capabilities.session_info,
+                            "discovery_results": capabilities.discovery_results,
+                            "last_discovered": capabilities.last_discovered.isoformat() if capabilities.last_discovered else None,
+                            "created_at": capabilities.created_at.isoformat() if capabilities.created_at else None,
+                            "updated_at": capabilities.updated_at.isoformat() if capabilities.updated_at else None
+                        }
+                    tools_data.append(tool_dict)
+                zip_file.writestr("tools.json", json.dumps(tools_data, indent=2))
+
+            if "rag" in included_sections:
+                rag_sources = db.query(RagSource).all()
+                rag_data = []
+                for source in rag_sources:
+                    rag_dict = {
+                        "id": source.id,
+                        "name": source.name,
+                        "content": source.content,
+                        "chunks_count": source.chunks_count,
+                        "source_type": source.source_type,
+                        "created_at": source.created_at.isoformat() if source.created_at else None,
+                        "updated_at": source.updated_at.isoformat() if source.updated_at else None
+                    }
+                    rag_data.append(rag_dict)
+                zip_file.writestr("rag_sources.json", json.dumps(rag_data, indent=2))
+                from .rag import get_chroma_export_path
+                chroma_dir = get_chroma_export_path()
+                if os.path.exists(chroma_dir):
+                    for root, dirs, files in os.walk(chroma_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, ".")
+                            zip_file.write(file_path, arcname)
+            else:
+                zip_file.writestr("rag_sources.json", "[]")
+
+            if "demo_prompts" in included_sections:
+                prompts = db.query(DemoPrompt).all()
+                prompts_data = []
+                for p in prompts:
+                    prompts_data.append({
+                        "title": p.title,
+                        "content": p.content,
+                        "category": p.category,
+                        "tags": p.tags or [],
+                        "is_malicious": p.is_malicious,
+                        "preferred_llm": getattr(p, "preferred_llm", None),
+                    })
+                zip_file.writestr("demo_prompts.json", json.dumps(prompts_data, indent=2))
+            else:
+                zip_file.writestr("demo_prompts.json", "[]")
+
+            if "tools" not in included_sections:
+                zip_file.writestr("tools.json", "[]")
+
             metadata = {
                 "export_timestamp": datetime.utcnow().isoformat(),
-                "version": "1.0",
+                "version": "2.0",
                 "description": "Agentic Demo Configuration Export",
-                "includes": [
-                    "app_config",
-                    "tools_and_capabilities", 
-                    "rag_sources",
-                    "chromadb_vector_store",
-                    "main_database"
-                ]
+                "includes": included_sections
             }
             zip_file.writestr("metadata.json", json.dumps(metadata, indent=2))
-        
-        # Prepare response
+
         zip_buffer.seek(0)
-        
-        # Generate filename with timestamp
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"agentic_demo_config_{timestamp}.zip"
-        
         return StreamingResponse(
             io.BytesIO(zip_buffer.getvalue()),
             media_type="application/zip",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 @app.post("/api/config/import")
 async def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Import complete configuration from a zip file"""
+    """Import configuration from a zip file. Supports v1.0 (full replace) and v2.0 (merge by section)."""
     try:
-        # Validate file type
         if not file.filename.endswith('.zip'):
             raise HTTPException(status_code=400, detail="File must be a .zip file")
-        
-        # Read the uploaded file
         file_content = await file.read()
-        
-        # Create temporary directory for extraction
         import tempfile
         import shutil
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Save uploaded file to temp location
             temp_zip_path = os.path.join(temp_dir, "import.zip")
             with open(temp_zip_path, "wb") as f:
                 f.write(file_content)
-            
-            # Extract zip file
             with zipfile.ZipFile(temp_zip_path, 'r') as zip_file:
                 zip_file.extractall(temp_dir)
-            
-            # Validate required files exist
-            required_files = ["config.json", "tools.json", "rag_sources.json", "metadata.json"]
-            for required_file in required_files:
-                if not os.path.exists(os.path.join(temp_dir, required_file)):
-                    raise HTTPException(status_code=400, detail=f"Missing required file: {required_file}")
-            
-            # Read and validate metadata
-            with open(os.path.join(temp_dir, "metadata.json"), 'r') as f:
+
+            metadata_path = os.path.join(temp_dir, "metadata.json")
+            if not os.path.exists(metadata_path):
+                raise HTTPException(status_code=400, detail="Missing metadata.json")
+            with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
-            
-            if metadata.get("version") != "1.0":
-                raise HTTPException(status_code=400, detail="Unsupported export version")
-            
-            # Import AppConfig
-            with open(os.path.join(temp_dir, "config.json"), 'r') as f:
-                config_data = json.load(f)
-            
-            # Clear existing config and create new one
-            db.query(AppConfig).delete()
-            new_config = AppConfig(
-                openai_api_key=config_data.get("openai_api_key"),
-                lakera_api_key=config_data.get("lakera_api_key"),
-                lakera_project_id=config_data.get("lakera_project_id"),
-                business_name=config_data.get("business_name"),
-                tagline=config_data.get("tagline"),
-                hero_text=config_data.get("hero_text"),
-                hero_image_url=config_data.get("hero_image_url"),
-                logo_url=config_data.get("logo_url"),
-                system_prompt=config_data.get("system_prompt"),
-                openai_model=config_data.get("openai_model", "gpt-4o-mini"),
-                temperature=config_data.get("temperature", "0.7"),
-                lakera_enabled=config_data.get("lakera_enabled", True),
-                lakera_blocking_mode=config_data.get("lakera_blocking_mode", False),
-                use_litellm=config_data.get("use_litellm", False),
-                litellm_base_url=config_data.get("litellm_base_url")
-            )
-            db.add(new_config)
-            # Auto-pick model when imported config has LiteLLM or invalid model for OpenAI
-            use_litellm = new_config.use_litellm or False
-            if use_litellm and new_config.openai_api_key:
-                allowed = llm_client.get_models(new_config)
-                if allowed and (not new_config.openai_model or new_config.openai_model not in allowed):
-                    new_config.openai_model = allowed[0]
-            elif not use_litellm and new_config.openai_model not in llm_client.STATIC_MODELS:
-                new_config.openai_model = llm_client.STATIC_MODELS[0]
-            
-            # Import Tools and MCP Capabilities
-            with open(os.path.join(temp_dir, "tools.json"), 'r') as f:
-                tools_data = json.load(f)
-            
-            # Clear existing tools and capabilities
-            db.query(MCPToolCapabilities).delete()
-            db.query(Tool).delete()
-            
-            for tool_data in tools_data:
-                # Create tool
-                new_tool = Tool(
-                    name=tool_data["name"],
-                    type=tool_data["type"],
-                    description=tool_data.get("description"),
-                    endpoint=tool_data["endpoint"],
-                    enabled=tool_data.get("enabled", True),
-                    config_json=tool_data.get("config_json", {})
+            version = metadata.get("version", "1.0")
+            includes = metadata.get("includes") or []
+
+            if version == "1.0":
+                # Legacy: full replace; require all files
+                for required in ["config.json", "tools.json", "rag_sources.json"]:
+                    if not os.path.exists(os.path.join(temp_dir, required)):
+                        raise HTTPException(status_code=400, detail=f"Missing required file: {required}")
+                with open(os.path.join(temp_dir, "config.json"), 'r') as f:
+                    config_data = json.load(f)
+                db.query(AppConfig).delete()
+                new_config = AppConfig(
+                    openai_api_key=config_data.get("openai_api_key"),
+                    lakera_api_key=config_data.get("lakera_api_key"),
+                    lakera_project_id=config_data.get("lakera_project_id"),
+                    rag_lakera_project_id=config_data.get("rag_lakera_project_id"),
+                    business_name=config_data.get("business_name"),
+                    tagline=config_data.get("tagline"),
+                    hero_text=config_data.get("hero_text"),
+                    hero_image_url=config_data.get("hero_image_url"),
+                    logo_url=config_data.get("logo_url"),
+                    system_prompt=config_data.get("system_prompt"),
+                    openai_model=config_data.get("openai_model", "gpt-4o-mini"),
+                    temperature=config_data.get("temperature", "7"),
+                    lakera_enabled=config_data.get("lakera_enabled", True),
+                    lakera_blocking_mode=config_data.get("lakera_blocking_mode", False),
+                    rag_content_scanning=config_data.get("rag_content_scanning", False),
+                    theme=config_data.get("theme"),
+                    use_litellm=config_data.get("use_litellm", False),
+                    litellm_base_url=config_data.get("litellm_base_url"),
                 )
-                db.add(new_tool)
-                db.flush()  # Get the ID
-                
-                # Create MCP capabilities if they exist
-                if "mcp_capabilities" in tool_data:
-                    cap_data = tool_data["mcp_capabilities"]
-                    new_capabilities = MCPToolCapabilities(
-                        tool_id=new_tool.id,
-                        tool_name=cap_data["tool_name"],
-                        server_name=cap_data.get("server_name"),
-                        session_info=cap_data.get("session_info"),
-                        discovery_results=cap_data.get("discovery_results", {})
+                db.add(new_config)
+                db.flush()
+                # Auto-pick model when imported config has LiteLLM or invalid model for OpenAI
+                use_litellm_val = getattr(new_config, "use_litellm", False) or False
+                if use_litellm_val and new_config.openai_api_key:
+                    allowed = llm_client.get_models(new_config)
+                    if allowed and (not new_config.openai_model or new_config.openai_model not in allowed):
+                        new_config.openai_model = allowed[0]
+                elif not use_litellm_val and new_config.openai_model not in llm_client.STATIC_MODELS:
+                    new_config.openai_model = llm_client.STATIC_MODELS[0]
+                with open(os.path.join(temp_dir, "tools.json"), 'r') as f:
+                    tools_data = json.load(f)
+                db.query(MCPToolCapabilities).delete()
+                db.query(Tool).delete()
+                for tool_data in tools_data:
+                    new_tool = Tool(
+                        name=tool_data["name"],
+                        type=tool_data["type"],
+                        description=tool_data.get("description"),
+                        endpoint=tool_data["endpoint"],
+                        enabled=tool_data.get("enabled", True),
+                        config_json=tool_data.get("config_json", {})
                     )
-                    db.add(new_capabilities)
-            
-            # Import RAG sources
-            with open(os.path.join(temp_dir, "rag_sources.json"), 'r') as f:
-                rag_data = json.load(f)
-            
-            # Clear existing RAG sources
-            db.query(RagSource).delete()
-            
-            for rag_source_data in rag_data:
-                new_rag_source = RagSource(
-                    name=rag_source_data["name"],
-                    content=rag_source_data["content"],
-                    chunks_count=rag_source_data.get("chunks_count", 0),
-                    source_type=rag_source_data.get("source_type", "generated")
-                )
-                db.add(new_rag_source)
-            
-            # Import ChromaDB
-            chroma_source_dir = os.path.join(temp_dir, "data", "chroma")
-            if os.path.exists(chroma_source_dir):
-                # Remove existing ChromaDB
-                chroma_target_dir = "data/chroma"
-                if os.path.exists(chroma_target_dir):
-                    shutil.rmtree(chroma_target_dir)
-                
-                # Copy new ChromaDB
-                shutil.copytree(chroma_source_dir, chroma_target_dir)
-                
-                # Reinitialize ChromaDB client to use new data
-                try:
-                    from .rag import reinitialize_chromadb
-                    reinitialize_chromadb()
-                    print("✅ ChromaDB reinitialized successfully")
-                except Exception as e:
-                    print(f"⚠️ ChromaDB reinitialization failed: {e}")
-                    print("ℹ️ This is not critical - ChromaDB will work on next restart")
-                    # Continue with import even if ChromaDB reinitialization fails
-                    # The RAG system will work with the new data on next restart
-            
-            # Note: We don't need to import the main database file since we're already
-            # importing all the data through the ORM above. The database file overwrite
-            # was causing schema mismatches when the imported DB had different schema.
-            
-            # Commit all changes
+                    db.add(new_tool)
+                    db.flush()
+                    if "mcp_capabilities" in tool_data:
+                        cap_data = tool_data["mcp_capabilities"]
+                        db.add(MCPToolCapabilities(
+                            tool_id=new_tool.id,
+                            tool_name=cap_data["tool_name"],
+                            server_name=cap_data.get("server_name"),
+                            session_info=cap_data.get("session_info"),
+                            discovery_results=cap_data.get("discovery_results", {})
+                        ))
+                with open(os.path.join(temp_dir, "rag_sources.json"), 'r') as f:
+                    rag_data = json.load(f)
+                db.query(RagSource).delete()
+                for rag_source_data in rag_data:
+                    db.add(RagSource(
+                        name=rag_source_data["name"],
+                        content=rag_source_data["content"],
+                        chunks_count=rag_source_data.get("chunks_count", 0),
+                        source_type=rag_source_data.get("source_type", "generated")
+                    ))
+                chroma_source_dir = os.path.join(temp_dir, "data", "chroma")
+                if os.path.exists(chroma_source_dir):
+                    chroma_import_dir = "data/chroma_import"
+                    if os.path.exists(chroma_import_dir):
+                        shutil.rmtree(chroma_import_dir)
+                    shutil.copytree(chroma_source_dir, chroma_import_dir)
+                    try:
+                        from .rag import reinitialize_chromadb
+                        reinitialize_chromadb(chroma_import_dir)
+                    except Exception:
+                        pass
+                # v1.0: import demo_prompts from demo_prompts.json if present, else from data/agentic_demo.db (old export format)
+                prompts_path_v1 = os.path.join(temp_dir, "demo_prompts.json")
+                db_path_v1 = os.path.join(temp_dir, "data", "agentic_demo.db")
+                if os.path.exists(prompts_path_v1):
+                    try:
+                        with open(prompts_path_v1, 'r') as f:
+                            prompts_data_v1 = json.load(f)
+                        if isinstance(prompts_data_v1, list):
+                            db.query(DemoPrompt).delete()
+                            for p in prompts_data_v1:
+                                if not isinstance(p, dict):
+                                    continue
+                                title = p.get("title") or ""
+                                content = p.get("content") or ""
+                                if not title and not content:
+                                    continue
+                                db.add(DemoPrompt(
+                                    title=title,
+                                    content=content,
+                                    category=p.get("category", "general"),
+                                    tags=p.get("tags") if isinstance(p.get("tags"), list) else [],
+                                    is_malicious=p.get("is_malicious", False),
+                                    preferred_llm=p.get("preferred_llm"),
+                                ))
+                    except Exception:
+                        pass
+                elif os.path.exists(db_path_v1):
+                    try:
+                        import sqlite3
+                        conn = sqlite3.connect(db_path_v1)
+                        conn.row_factory = sqlite3.Row
+                        cur = conn.execute("PRAGMA table_info(demo_prompts)")
+                        columns = [row[1] for row in cur.fetchall()]
+                        conn.close()
+                        if "title" in columns and "content" in columns:
+                            conn = sqlite3.connect(db_path_v1)
+                            conn.row_factory = sqlite3.Row
+                            cur = conn.execute(
+                                "SELECT title, content, category, tags, is_malicious FROM demo_prompts"
+                                + (", preferred_llm" if "preferred_llm" in columns else "")
+                            )
+                            rows = cur.fetchall()
+                            conn.close()
+                            db.query(DemoPrompt).delete()
+                            for row in rows:
+                                r = dict(row)
+                                tags = r.get("tags")
+                                if isinstance(tags, str):
+                                    try:
+                                        tags = json.loads(tags) if tags else []
+                                    except Exception:
+                                        tags = []
+                                if not isinstance(tags, list):
+                                    tags = []
+                                db.add(DemoPrompt(
+                                    title=r.get("title") or "",
+                                    content=r.get("content") or "",
+                                    category=r.get("category") or "general",
+                                    tags=tags,
+                                    is_malicious=bool(r.get("is_malicious", False)),
+                                    preferred_llm=r.get("preferred_llm") if "preferred_llm" in columns else None,
+                                ))
+                    except Exception:
+                        pass
+                db.commit()
+                return {"message": "Configuration imported successfully", "imported_at": datetime.utcnow().isoformat(), "metadata": metadata}
+
+            # Version 2.0: merge by section
+            config_path = os.path.join(temp_dir, "config.json")
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config_data = json.load(f)
+                config_row = db.query(AppConfig).first()
+                if not config_row:
+                    config_row = AppConfig()
+                    db.add(config_row)
+                    db.flush()
+                for section, fields in EXPORT_SECTIONS.items():
+                    if section not in includes:
+                        continue
+                    for field in fields:
+                        if field in config_data:
+                            setattr(config_row, field, config_data[field])
+
+            if "tools" in includes:
+                tools_path = os.path.join(temp_dir, "tools.json")
+                if os.path.exists(tools_path):
+                    with open(tools_path, 'r') as f:
+                        tools_data = json.load(f)
+                    if isinstance(tools_data, list) and len(tools_data) > 0:
+                        db.query(MCPToolCapabilities).delete()
+                        db.query(Tool).delete()
+                        for tool_data in tools_data:
+                            new_tool = Tool(
+                                name=tool_data["name"],
+                                type=tool_data["type"],
+                                description=tool_data.get("description"),
+                                endpoint=tool_data["endpoint"],
+                                enabled=tool_data.get("enabled", True),
+                                config_json=tool_data.get("config_json", {})
+                            )
+                            db.add(new_tool)
+                            db.flush()
+                            if "mcp_capabilities" in tool_data:
+                                cap_data = tool_data["mcp_capabilities"]
+                                db.add(MCPToolCapabilities(
+                                    tool_id=new_tool.id,
+                                    tool_name=cap_data["tool_name"],
+                                    server_name=cap_data.get("server_name"),
+                                    session_info=cap_data.get("session_info"),
+                                    discovery_results=cap_data.get("discovery_results", {})
+                                ))
+
+            if "rag" in includes:
+                rag_path = os.path.join(temp_dir, "rag_sources.json")
+                if os.path.exists(rag_path):
+                    with open(rag_path, 'r') as f:
+                        rag_data = json.load(f)
+                    if isinstance(rag_data, list):
+                        db.query(RagSource).delete()
+                        for rag_source_data in rag_data:
+                            db.add(RagSource(
+                                name=rag_source_data["name"],
+                                content=rag_source_data["content"],
+                                chunks_count=rag_source_data.get("chunks_count", 0),
+                                source_type=rag_source_data.get("source_type", "generated")
+                            ))
+                chroma_source_dir = os.path.join(temp_dir, "data", "chroma")
+                if os.path.exists(chroma_source_dir):
+                    chroma_import_dir = "data/chroma_import"
+                    if os.path.exists(chroma_import_dir):
+                        shutil.rmtree(chroma_import_dir)
+                    shutil.copytree(chroma_source_dir, chroma_import_dir)
+                    try:
+                        from .rag import reinitialize_chromadb
+                        reinitialize_chromadb(chroma_import_dir)
+                    except Exception:
+                        pass
+
+            if "demo_prompts" in includes:
+                prompts_path = os.path.join(temp_dir, "demo_prompts.json")
+                if os.path.exists(prompts_path):
+                    with open(prompts_path, 'r') as f:
+                        prompts_data = json.load(f)
+                    if isinstance(prompts_data, list):
+                        db.query(DemoPrompt).delete()
+                        for p in prompts_data:
+                            if not isinstance(p, dict):
+                                continue
+                            title = p.get("title") or ""
+                            content = p.get("content") or ""
+                            if not title and not content:
+                                continue
+                            db.add(DemoPrompt(
+                                title=title,
+                                content=content,
+                                category=p.get("category", "general"),
+                                tags=p.get("tags") if isinstance(p.get("tags"), list) else [],
+                                is_malicious=p.get("is_malicious", False),
+                                preferred_llm=p.get("preferred_llm"),
+                            ))
+
             db.commit()
-            
             return {
                 "message": "Configuration imported successfully",
                 "imported_at": datetime.utcnow().isoformat(),
                 "metadata": metadata
             }
-        
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid zip file")
     except json.JSONDecodeError as e:
@@ -415,6 +567,15 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     config = db.query(AppConfig).first()
     if not config:
         raise HTTPException(status_code=500, detail="No configuration found")
+
+    # If sent from a demo prompt suggestion with a preferred LLM, switch model permanently
+    if request.prompt_id:
+        demo_prompt = db.query(DemoPrompt).filter(DemoPrompt.id == request.prompt_id).first()
+        if demo_prompt and demo_prompt.preferred_llm:
+            valid_models = llm_client.get_models(config)
+            if valid_models and demo_prompt.preferred_llm in valid_models:
+                config.openai_model = demo_prompt.preferred_llm
+                db.commit()
     
     # Create agent request
     agent_request = AgentRequest(
@@ -794,7 +955,9 @@ async def search_demo_prompts(
                 "full_content": prompt.content,
                 "title": prompt.title,
                 "category": prompt.category,
-                "is_malicious": prompt.is_malicious
+                "is_malicious": prompt.is_malicious,
+                "prompt_id": prompt.id,
+                "preferred_llm": getattr(prompt, "preferred_llm", None),
             })
         elif query in content_lower:
             # Use content for autocomplete
@@ -805,7 +968,9 @@ async def search_demo_prompts(
                 "full_content": prompt.content,
                 "title": prompt.title,
                 "category": prompt.category,
-                "is_malicious": prompt.is_malicious
+                "is_malicious": prompt.is_malicious,
+                "prompt_id": prompt.id,
+                "preferred_llm": getattr(prompt, "preferred_llm", None),
             })
     
     return {
@@ -817,7 +982,8 @@ async def search_demo_prompts(
                 "category": prompt.category,
                 "tags": prompt.tags,
                 "is_malicious": prompt.is_malicious,
-                "usage_count": prompt.usage_count
+                "usage_count": prompt.usage_count,
+                "preferred_llm": getattr(prompt, "preferred_llm", None),
             }
             for prompt in results
         ],
@@ -877,6 +1043,14 @@ async def get_last_lakera_result():
     if result is None:
         raise HTTPException(status_code=404, detail="No Lakera result available")
     return result
+
+@app.get("/api/lakera/last_request")
+async def get_last_lakera_request():
+    """Get the last Lakera request payload for debugging (messages + metadata)"""
+    req = lakera.get_last_request()
+    if req is None:
+        raise HTTPException(status_code=404, detail="No Lakera request recorded yet")
+    return req
 
 @app.get("/api/rag/scanning/last")
 async def get_last_rag_scanning_result():

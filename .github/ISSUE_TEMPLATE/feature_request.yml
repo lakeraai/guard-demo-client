@@ -1,0 +1,74 @@
+name: ✨ Feature Request
+description: Suggest a new capability or enhancement to the demo
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Important
+
+        This demo environment is intentionally lightweight.
+
+        • Submit ONE focused feature per request  
+        • Multi-phase proposals should be split into separate feature requests  
+        • Broader architectural discussions belong in GitHub Discussions  
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: This proposal is limited to ONE clearly defined enhancement.
+          required: true
+        - label: I understand this is a demo repository, not a production platform.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What specific problem does this solve?
+      placeholder: "Currently the demo requires manual MCP configuration..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the smallest useful version of this feature.
+      placeholder: |
+        Bundle a single no-auth MCP server locally and auto-register it in Tool Manager.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope Boundaries
+      description: What is explicitly NOT included in this request?
+      placeholder: |
+        This request does NOT include UI redesign or multi-scenario demo automation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: demo_value
+    attributes:
+      label: Demo Value
+      description: How does this improve demo clarity or customer explanation?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated Complexity
+      options:
+        - Small (few lines / config only)
+        - Medium (new module or integration)
+        - Large (multi-component change)
+    validations:
+      required: true

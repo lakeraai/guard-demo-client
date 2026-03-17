@@ -1,11 +1,10 @@
-import os
 import re
 import json
 import time
 import queue
 import threading
 from typing import Dict, Any, Optional, List, Tuple
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin, urlparse, parse_qs, quote
 
 import requests
 
@@ -71,6 +70,14 @@ class HTTPTransport(MCPTransport):
             raise RuntimeError(
                 "SSE_BODY_ON_HTTP: POST returned an SSE block; use SSE transport."
             )
+        # Streamable HTTP (/mcp) may return SSE-style body: "data: {...}\n\n"
+        if body.lstrip().startswith("data:"):
+            data_lines = [line[5:].lstrip() for line in body.splitlines() if line.startswith("data:")]
+            if data_lines:
+                try:
+                    return json.loads("\n".join(data_lines))
+                except json.JSONDecodeError:
+                    pass
         try:
             return r.json()
         except Exception:
@@ -130,6 +137,11 @@ class SSETransport(MCPTransport):
     """
     def __init__(self, sse_url: str, timeout: float = 60.0):
         self.base_url = re.sub(r"#.*$", "", sse_url.rstrip("/"))
+        self._sse_fragment = (re.search(r"#(.+)$", sse_url) or [None, None])[1]
+        # Pass fragment to proxy so it can route to the correct stdio server (e.g. ToolHive SSE proxy).
+        # Use query param (fragment is never sent over HTTP; proxy may expect ?server=name).
+        if self._sse_fragment:
+            self.base_url = self.base_url + ("&" if "?" in self.base_url else "?") + "server=" + quote(self._sse_fragment, safe="")
         self.timeout = timeout
         self.session = requests.Session()
         self.session_id: Optional[str] = None
@@ -138,6 +150,7 @@ class SSETransport(MCPTransport):
         self._resp_map: Dict[str, queue.Queue] = {}
         self._rpc_id = 0
         self._stream_stop = threading.Event()
+        self._stream_error: Optional[Exception] = None  # reader thread connection error
 
     def _next_id(self) -> str:
         self._rpc_id += 1
@@ -147,6 +160,8 @@ class SSETransport(MCPTransport):
         h = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
         if self.session_id:
             h["Mcp-Session-Id"] = self.session_id
+        if getattr(self, "_sse_fragment", None):
+            h["X-MCP-Server"] = self._sse_fragment
         return h
 
     def _post_target(self) -> str:
@@ -174,8 +189,17 @@ class SSETransport(MCPTransport):
 
     def _start_stream(self):
         def reader():
-            with self.session.get(self.base_url, stream=True, timeout=None,
-                                  headers={"Accept": "text/event-stream"}) as r:
+            self._stream_error = None
+            try:
+                get_headers = {"Accept": "text/event-stream"}
+                if getattr(self, "_sse_fragment", None):
+                    get_headers["X-MCP-Server"] = self._sse_fragment
+                r = self.session.get(self.base_url, stream=True, timeout=None,
+                                    headers=get_headers)
+            except Exception as e:
+                self._stream_error = e
+                return
+            with r:
                 sid = r.headers.get("Mcp-Session-Id") or r.headers.get("MCP-Session-Id")
                 if sid:
                     self.session_id = sid
@@ -242,6 +266,18 @@ class SSETransport(MCPTransport):
 
     def initialize(self) -> Dict[str, Any]:
         self._start_stream()
+        # Give reader thread a moment to connect or set _stream_error
+        time.sleep(0.15)
+        if self._stream_error is not None:
+            err = self._stream_error
+            self._stream_error = None
+            msg = str(err)
+            if "Connection refused" in msg or "61" in msg:
+                raise RuntimeError(
+                    f"Cannot connect to MCP proxy at {self.base_url} (connection refused). "
+                    "Is the ToolHive proxy running and listening on this address?"
+                ) from err
+            raise RuntimeError(f"MCP SSE connection failed: {msg}") from err
         # Give legacy servers a moment to emit 'endpoint'
         t_end = time.time() + 0.5
         while self.post_url is None and time.time() < t_end:
@@ -309,6 +345,7 @@ class SSETransport(MCPTransport):
             raise RuntimeError(f"HTTP {r.status_code} posting '{method}': {r.text}")
 
         env = self._parse_post_body_as_jsonrpc(r.text)
+        from_body = env is not None
         if not env:
             try:
                 env = self._resp_map[req_id].get(timeout=self.timeout)
@@ -318,7 +355,8 @@ class SSETransport(MCPTransport):
 
         if "error" in env:
             raise RuntimeError(f"MCP error {env['error']}")
-        return env.get("result", env)
+        res = env.get("result", env)
+        return res
 
     def send_notification(self, method: str, params: Optional[Dict[str, Any]]) -> None:
         note = {"jsonrpc": "2.0", "method": method}

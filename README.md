@@ -11,7 +11,7 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 - **RAG System** supporting file uploads and AI-generated seed packs
 - **ToolHive Integration** via MCP tools
 - **Admin Console** for complete configuration management
-- **Export/Import** JSON skins for easy sharing
+- **Export/Import** configuration as ZIP with selective sections (appearance, LLM, security, RAG, demo prompts, tools, etc.)
 
 ## 🏗️ Architecture
 
@@ -34,7 +34,7 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 
 ```bash
 git clone <repository-url>
-cd lakeraclientdemov2
+cd guard-demo-client
 ```
 
 ## 🚀 Quick Start (Recommended)
@@ -173,6 +173,7 @@ In the **Tools** tab:
 In the **Demo Prompts** tab:
 - Create curated demo prompts for different scenarios
 - Organize prompts by category (general, security, tools, rag, malicious)
+- Set a **preferred LLM** per prompt (chat uses that model when the prompt is selected)
 - Add tags for easy searching
 - Mark prompts as malicious for security testing
 - Track usage statistics
@@ -186,71 +187,75 @@ In the **Demo Prompts** tab:
 
 ## 🔧 API Endpoints
 
+All API routes are under the `/api` prefix.
+
 ### Config
-- `GET /config` - Get current configuration
-- `PUT /config` - Update configuration
-- `POST /config/export` - Export config as JSON
-- `POST /config/import` - Import config from JSON
+- `GET /api/config` - Get current configuration
+- `PUT /api/config` - Update configuration
+- `GET /api/config/export` - Export config as a **ZIP file** (query: `?include=appearance,llm,...` and `?version=2`; omit include = safe default sections)
+- `POST /api/config/import` - Import config from an exported **ZIP file** (merge by section)
 
 ### Chat
-- `POST /chat` - Send message to AI assistant
+- `POST /api/chat` - Send message to AI assistant
 
 ### RAG
-- `POST /rag/upload` - Upload documents
-- `POST /rag/generate` - Generate AI content
-- `GET /rag/search` - Search stored content
+- `POST /api/rag/upload` - Upload documents
+- `POST /api/rag/generate` - Generate AI content
+- `GET /api/rag/search` - Search stored content
 
 ### Tools
-- `GET /tools` - List tools
-- `POST /tools` - Create tool
-- `PUT /tools/{id}` - Update tool
-- `DELETE /tools/{id}` - Delete tool
-- `POST /tools/test/{id}` - Test tool
+- `GET /api/tools` - List tools
+- `POST /api/tools` - Create tool
+- `PUT /api/tools/{id}` - Update tool
+- `DELETE /api/tools/{id}` - Delete tool
+- `POST /api/tools/test/{id}` - Test tool
 
 ### Lakera
-- `GET /lakera/last` - Get last guardrail result
+- `GET /api/lakera/last` - Get last guardrail result
 
 ### Demo Prompts
-- `GET /demo-prompts` - List demo prompts
-- `GET /demo-prompts/search` - Search demo prompts with autocomplete
-- `POST /demo-prompts` - Create demo prompt
-- `PUT /demo-prompts/{id}` - Update demo prompt
-- `DELETE /demo-prompts/{id}` - Delete demo prompt
-- `POST /demo-prompts/{id}/use` - Track prompt usage
+- `GET /api/demo-prompts` - List demo prompts
+- `GET /api/demo-prompts/search` - Search demo prompts with autocomplete
+- `POST /api/demo-prompts` - Create demo prompt
+- `PUT /api/demo-prompts/{id}` - Update demo prompt
+- `DELETE /api/demo-prompts/{id}` - Delete demo prompt
+- `POST /api/demo-prompts/{id}/use` - Track prompt usage
 
 ## 📁 Project Structure
 
 ```
-lakeraclientdemov2/
+guard-demo-client/
 ├── backend/                 # FastAPI backend
 │   ├── __init__.py
-│   ├── main.py             # FastAPI app
+│   ├── main.py             # FastAPI app, config export/import
 │   ├── models.py           # SQLAlchemy models
 │   ├── schemas.py          # Pydantic schemas
 │   ├── database.py         # Database connection
 │   ├── llm_client.py       # LLM integration (OpenAI or LiteLLM proxy)
-│   ├── rag.py             # RAG service
-│   ├── lakera.py          # Lakera integration
-│   ├── toolhive.py        # ToolHive service
-│   └── agent.py           # ReAct agent
+│   ├── rag.py              # RAG service, ChromaDB
+│   ├── lakera.py           # Lakera integration
+│   ├── toolhive.py         # ToolHive service
+│   └── agent.py            # ReAct agent
 ├── src/                    # React frontend
 │   ├── components/         # React components
 │   │   ├── ChatWidget.tsx  # Chat with autocomplete
 │   │   ├── DemoPromptManager.tsx # Prompt management
+│   │   ├── LakeraOverlay.tsx    # Guard results
 │   │   └── ...
-│   ├── pages/             # Page components
-│   ├── services/          # API services
-│   ├── types/             # TypeScript types
+│   ├── pages/              # Page components
+│   ├── services/           # API services
+│   ├── types/              # TypeScript types
 │   └── ...
 ├── data/                   # Data storage
-│   ├── agentic_demo.db    # SQLite database
-│   └── chroma/            # ChromaDB vectors
-├── uploads/               # Uploaded files
-├── exports/               # Exported configs
-├── requirements.txt       # Python dependencies
-├── package.json          # Node.js dependencies
-├── start_backend.py      # Backend startup script
-└── README.md             # This file
+│   ├── agentic_demo.db     # SQLite database
+│   ├── chroma/             # ChromaDB vectors (default)
+│   └── chroma_import/      # ChromaDB after import (if used)
+├── uploads/                # Uploaded files
+├── requirements.txt        # Python dependencies
+├── package.json            # Node.js dependencies
+├── start_all.py            # Start backend + frontend (recommended)
+├── start_backend.py        # Backend-only startup
+└── README.md               # This file
 ```
 
 ## 🎯 Demo Features
@@ -301,15 +306,29 @@ lakeraclientdemov2/
 
 ## 📦 Export/Import
 
-### Export Configuration
-1. Go to Admin Console → Export/Import
-2. Click "Export Config"
-3. Download JSON file with all settings
+Configuration is exported and imported as **ZIP files** (not JSON). You choose which sections to include.
 
-### Import Configuration
-1. Go to Admin Console → Export/Import
-2. Upload previously exported JSON file
-3. Configuration will be restored
+### Export
+
+1. Go to **Admin Console → Export/Import**.
+2. Check the sections you want in the export:
+   - **Appearance**, **LLM**, **Security**, **RAG scanning**, **Demo prompts**, **Tools**, **RAG** (default: all checked).
+   - **API keys** and **Project IDs** are off by default (safe for sharing).
+3. Click **Export**. A ZIP file is downloaded (e.g. `agentic_demo_config_2026-02-23T12-00-00.zip`).
+
+The ZIP contains `metadata.json` (version 2.0, list of included sections), `config.json`, and section-specific files such as `demo_prompts.json`, `tools.json`, `rag_sources.json`, and the ChromaDB vector store when those sections are included.
+
+### Import
+
+1. Go to **Admin Console → Export/Import**.
+2. Upload a previously exported **ZIP** file.
+3. The app **merges by section**: only sections present in the ZIP are applied (e.g. a “safe” export does not overwrite your API keys or project IDs).
+4. After import, a summary shows which sections were applied. RAG (ChromaDB) is loaded from the ZIP without replacing the live `data/chroma` directory in use; the app switches to the imported vectors so RAG keeps working.
+
+**Tips:**
+
+- For **demo prompts** to be in the export, include the **Demo prompts** section when exporting. Re-export after adding prompts if your current ZIP was created before that change.
+- **v1.0** ZIPs (no `metadata.json` version 2.0 or old format) are still supported: full replace behavior, and demo prompts can be read from `demo_prompts.json` or from `data/agentic_demo.db` inside the ZIP.
 
 ## 📝 Changelog
 

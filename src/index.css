@@ -3,7 +3,16 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* Default (blue) theme values; can be overridden by body.theme-* classes */
+  --color-primary-50: 239 246 255;  /* #eff6ff */
+  --color-primary-100: 219 234 254; /* #dbeafe */
+  --color-primary-500: 59 130 246;  /* #3b82f6 */
+  --color-primary-600: 37 99 235;   /* #2563eb */
+  --color-primary-700: 29 78 216;   /* #1d4ed8 */
+
+  --font-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  font-family: var(--font-body);
   line-height: 1.5;
   font-weight: 400;
 
@@ -14,10 +23,51 @@
   -webkit-text-size-adjust: 100%;
 }
 
+/* Theme variants override the CSS variables above */
+body.theme-blue {
+  --color-primary-50: 239 246 255;
+  --color-primary-100: 219 234 254;
+  --color-primary-500: 59 130 246;
+  --color-primary-600: 37 99 235;
+  --color-primary-700: 29 78 216;
+  --font-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body.theme-emerald {
+  /* Tailwind emerald palette */
+  --color-primary-50: 236 253 245;
+  --color-primary-100: 209 250 229;
+  --color-primary-500: 16 185 129;
+  --color-primary-600: 5 150 105;
+  --color-primary-700: 4 120 87;
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body.theme-purple {
+  /* Tailwind purple/violet palette */
+  --color-primary-50: 245 243 255;
+  --color-primary-100: 237 233 254;
+  --color-primary-500: 139 92 246;
+  --color-primary-600: 124 58 237;
+  --color-primary-700: 109 40 217;
+  --font-body: 'Georgia', 'Times New Roman', serif;
+}
+
+body.theme-amber {
+  /* Tailwind amber palette */
+  --color-primary-50: 255 251 235;
+  --color-primary-100: 254 243 199;
+  --color-primary-500: 245 158 11;
+  --color-primary-600: 217 119 6;
+  --color-primary-700: 180 83 9;
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  font-family: var(--font-body);
 }
 
 #root {

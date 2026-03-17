@@ -6,6 +6,7 @@ export interface AppConfig {
   hero_text?: string;
   hero_image_url?: string;
   logo_url?: string;
+  theme?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
   use_litellm?: boolean;
@@ -28,6 +29,7 @@ export interface AppConfigUpdate {
   hero_text?: string;
   hero_image_url?: string;
   logo_url?: string;
+  theme?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
   use_litellm?: boolean;
@@ -46,6 +48,7 @@ export interface AppConfigUpdate {
 export interface ChatRequest {
   message: string;
   session_id?: string;
+  prompt_id?: number;
 }
 
 export interface ChatResponse {
@@ -131,6 +134,7 @@ export interface DemoPrompt {
   category: string;
   tags: string[];
   is_malicious: boolean;
+  preferred_llm?: string;
   usage_count: number;
   created_at: string;
   updated_at: string;
@@ -142,6 +146,7 @@ export interface DemoPromptCreate {
   category: string;
   tags: string[];
   is_malicious: boolean;
+  preferred_llm?: string | null;
 }
 
 export interface DemoPromptUpdate extends DemoPromptCreate {}
@@ -152,6 +157,8 @@ export interface DemoPromptSuggestion {
   title: string;
   category: string;
   is_malicious: boolean;
+  prompt_id?: number;
+  preferred_llm?: string;
 }
 
 export interface DemoPromptSearchResponse {

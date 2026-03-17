@@ -2,8 +2,20 @@ from typing import Dict, Any, List, Optional
 import json
 from sqlalchemy.orm import Session
 from .database import get_db
-from .models import Tool, MCPToolCapabilities
+from .models import Tool, MCPToolCapabilities, AppConfig
 from . import lakera
+
+def _mcp_error_message(result: Dict[str, Any]) -> str:
+    """Extract a single error string from MCP result content (may be list of {type, text})."""
+    content = result.get("content", "Unknown error")
+    if isinstance(content, list):
+        parts = [c.get("text", str(c)) for c in content if isinstance(c, dict) and c.get("type") == "text"]
+        msg = " ".join(parts) if parts else str(content)
+    else:
+        msg = str(content)
+    if "-35" in msg or "EAGAIN" in msg:
+        msg += " (Tip: Error -35/EAGAIN often occurs when the MCP server uses Node.js stdio with non-blocking stdin. Ensure ToolHive/filesystem server is updated; volume mount for /projects must be correct.)"
+    return msg
 
 async def enabled_tools(db: Session) -> List[Dict[str, Any]]:
     """
@@ -215,7 +227,7 @@ async def execute_mcp_tool(tool: Dict[str, Any], args: Dict[str, Any], db: Sessi
     try:
         endpoint = tool["endpoint"]
         print(f"🔧 Executing MCP tool: {tool['name']} at {endpoint}")
-        
+
         from . import llm_client
         from .mcp import build_transport, mcp_initialize, try_list, mcp_call
         from .models import AppConfig
@@ -262,14 +274,14 @@ async def execute_mcp_tool(tool: Dict[str, Any], args: Dict[str, Any], db: Sessi
                     
                     # Call the MCP tool directly with provided args
                     result = mcp_call(transport, "tools/call", {"name": target_tool["name"], "arguments": args})
-                    
+
                     print(f"🔧 Tool execution successful: {str(result)[:200]}...")
                     
                     # Check if the MCP result indicates an error
                     if isinstance(result, dict) and result.get("isError"):
                         return {
                             "status": "error",
-                            "error": f"MCP tool returned error: {result.get('content', 'Unknown error')}",
+                            "error": f"MCP tool returned error: {_mcp_error_message(result)}",
                             "tool_name": tool["name"],
                             "method_used": "direct_call",
                             "result": result
@@ -409,7 +421,7 @@ async def execute_http_tool(tool: Dict[str, Any], args: Dict[str, Any], function
                     if isinstance(result, dict) and result.get("isError"):
                         return {
                             "status": "error",
-                            "error": f"MCP tool returned error: {result.get('content', 'Unknown error')}",
+                            "error": f"MCP tool returned error: {_mcp_error_message(result)}",
                             "tool_name": tool["name"],
                             "method_used": "direct_call",
                             "result": result
@@ -479,7 +491,7 @@ async def execute_http_tool(tool: Dict[str, Any], args: Dict[str, Any], function
                         if isinstance(result, dict) and result.get("isError"):
                             return {
                                 "status": "error",
-                                "error": f"MCP tool returned error: {result.get('content', 'Unknown error')}",
+                                "error": f"MCP tool returned error: {_mcp_error_message(result)}",
                                 "tool_name": tool["name"],
                                 "method_used": "mcp_sse_direct_call",
                                 "result": result
@@ -548,12 +560,21 @@ async def moderate_tool_response(tool_name: str, tool_content: str, lakera_api_k
             {"role": "tool", "content": tool_content}
         ]
         
+        # Get system prompt from app config (if any)
+        try:
+            db = next(get_db())
+            cfg = db.query(AppConfig).first()
+            sys_prompt = cfg.system_prompt if cfg else None
+        except Exception:
+            sys_prompt = None
+
         # Check with Lakera
         lakera_status = await lakera.check_interaction(
             messages=messages,
             meta={"tool_name": tool_name, "content_type": "tool_response"},
             api_key=lakera_api_key,
-            project_id=lakera_project_id
+            project_id=lakera_project_id,
+            system_prompt=sys_prompt
         )
         
         return lakera_status

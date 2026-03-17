@@ -8,6 +8,19 @@ interface LakeraOverlayProps {
   onClose: () => void;
 }
 
+/** Map Lakera message_id to role when system prompt is first (0=system, 1=user, 2=assistant, 3=user, ...). */
+function messageIdToRole(messageId: number): 'system' | 'user' | 'assistant' {
+  if (messageId === 0) return 'system';
+  if (messageId >= 1) return messageId % 2 === 1 ? 'user' : 'assistant';
+  return 'user'; // fallback for legacy or invalid id
+}
+
+function messageIdToLabel(messageId: number): string {
+  if (messageId < 0) return 'Message';
+  const role = messageIdToRole(messageId);
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
 const LakeraOverlay: React.FC<LakeraOverlayProps> = ({ isOpen, onClose }) => {
   const [lakeraResult, setLakeraResult] = useState<LakeraResult | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -63,18 +76,18 @@ const LakeraOverlay: React.FC<LakeraOverlayProps> = ({ isOpen, onClose }) => {
   const getViolationSummary = () => {
     if (!lakeraResult || !lakeraResult.breakdown) return null;
     
-    // Count violations by type and message
-    const violations: { [key: string]: { user: number; assistant: number } } = {};
+    // Count violations by type and message (message_id: 0=system, 1=user, 2=assistant, 3=user, ...)
+    const violations: { [key: string]: { system: number; user: number; assistant: number } } = {};
     
     lakeraResult.breakdown.forEach((detector: any) => {
       if (detector.detected) {
         const type = detector.detector_type || 'unknown';
-        const messageType = detector.message_id === 0 ? 'user' : detector.message_id === 1 ? 'assistant' : 'unknown';
+        const messageType = messageIdToRole(detector.message_id ?? -1);
         
         if (!violations[type]) {
-          violations[type] = { user: 0, assistant: 0 };
+          violations[type] = { system: 0, user: 0, assistant: 0 };
         }
-        if (messageType === 'user' || messageType === 'assistant') {
+        if (messageType === 'system' || messageType === 'user' || messageType === 'assistant') {
           violations[type][messageType]++;
         }
       }
@@ -153,6 +166,11 @@ const LakeraOverlay: React.FC<LakeraOverlayProps> = ({ isOpen, onClose }) => {
                           <div key={type} className="flex items-center justify-between">
                             <span className="font-medium">{label}</span>
                             <div className="flex items-center space-x-2">
+                              {counts.system > 0 && (
+                                <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs">
+                                  System: {counts.system}
+                                </span>
+                              )}
                               {counts.user > 0 && (
                                 <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs">
                                   User: {counts.user}
@@ -195,7 +213,7 @@ const LakeraOverlay: React.FC<LakeraOverlayProps> = ({ isOpen, onClose }) => {
                             ? 'bg-red-100 text-red-800'
                             : 'bg-green-100 text-green-800'
                         }`}>
-                          {detector.message_id === 0 ? 'User: ' : detector.message_id === 1 ? 'Assistant: ' : ''}
+                          {messageIdToLabel(detector.message_id ?? -1)}: 
                           {detector.detected ? 'Detected' : 'Clear'}
                         </span>
                       </div>

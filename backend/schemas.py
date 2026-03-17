@@ -18,6 +18,8 @@ class AppConfigBase(BaseModel):
     openai_model: str = "gpt-4o-mini"
     temperature: int = 7
     system_prompt: Optional[str] = None
+    # UI theme: e.g. "blue", "emerald", "purple", "amber"
+    theme: Optional[str] = "blue"
 
 class AppConfigResponse(AppConfigBase):
     id: int
@@ -40,6 +42,7 @@ class AppConfigUpdate(AppConfigBase):
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    prompt_id: Optional[int] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -92,6 +95,7 @@ class DemoPromptBase(BaseModel):
     category: str = "general"
     tags: List[str] = []
     is_malicious: bool = False
+    preferred_llm: Optional[str] = None
 
 class DemoPromptResponse(DemoPromptBase):
     id: int
