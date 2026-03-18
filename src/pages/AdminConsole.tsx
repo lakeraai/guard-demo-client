@@ -10,6 +10,26 @@ import RagManagement, { RagManagementRef } from '../components/RagManagement';
 import DemoPromptManager from '../components/DemoPromptManager';
 
 type TabType = 'setup' | 'branding' | 'llm' | 'rag' | 'rag-scanning' | 'tools' | 'security' | 'prompts' | 'export';
+const PROVIDER_OPTIONS = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'lmstudio', label: 'LM Studio' },
+  { value: 'llamacpp', label: 'llama.cpp' },
+  { value: 'azure_openai', label: 'Azure OpenAI' },
+  { value: 'azure_openai_proxy', label: 'Azure OpenAI Proxy / APIM' },
+  { value: 'foundry', label: 'MS Foundry / Azure-compatible' },
+  { value: 'custom', label: 'Custom OpenAI-compatible' },
+];
+
+const isResolvableBaseUrl = (value?: string) => {
+  if (!value || !value.trim()) return false;
+  try {
+    const url = new URL(value);
+    return Boolean(url.protocol && url.host);
+  } catch {
+    return false;
+  }
+};
 
 const AdminConsole: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('setup');
@@ -23,6 +43,11 @@ const AdminConsole: React.FC = () => {
   const [showLakeraKey, setShowLakeraKey] = useState(false);
   const [showMCPInstructions, setShowMCPInstructions] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [embeddingAvailableModels, setEmbeddingAvailableModels] = useState<string[]>([]);
+  const [modelSource, setModelSource] = useState<string>('fallback');
+  const [embeddingModelSource, setEmbeddingModelSource] = useState<string>('fallback');
+  const [apiVersionDraft, setApiVersionDraft] = useState('');
+  const [embeddingApiVersionDraft, setEmbeddingApiVersionDraft] = useState('');
   const [ragScanningNotificationCount, setRagScanningNotificationCount] = useState<number>(0);
   const [ragScanningProgress, setRagScanningProgress] = useState<{isScanning: boolean; current: number; total: number; filename?: string} | null>(null);
   const progressPollingRef = useRef<number | null>(null);
@@ -42,11 +67,60 @@ const AdminConsole: React.FC = () => {
   });
   const [lastImportIncludes, setLastImportIncludes] = useState<string[] | null>(null);
 
+  const chatModelOptions = config
+    ? Array.from(new Set([config.llm_model, ...availableModels].filter(Boolean)))
+    : availableModels;
+  const embeddingModelOptions = config
+    ? Array.from(new Set([config.llm_embedding_model, ...embeddingAvailableModels].filter(Boolean)))
+    : embeddingAvailableModels;
+  const azureProviderSelected = config?.llm_provider === 'azure_openai';
+  const azureProxyProviderSelected = config?.llm_provider === 'azure_openai_proxy';
+
   useEffect(() => {
     loadConfig();
-    loadModels();
     loadRagScanningResult();
   }, []);
+
+  useEffect(() => {
+    if (!config) return;
+
+    const provider = config.llm_provider || 'openai';
+    const baseUrl = config.llm_base_url?.trim();
+    const needsCustomEndpoint = provider !== 'openai';
+
+    if (needsCustomEndpoint && !isResolvableBaseUrl(baseUrl)) {
+      setModelSource('fallback');
+      setAvailableModels(config.llm_model ? [config.llm_model] : []);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      loadModels();
+    }, 500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [config?.llm_provider, config?.llm_base_url, config?.llm_api_key]);
+
+  useEffect(() => {
+    if (!config) return;
+
+    const provider = config.llm_provider || 'openai';
+    const fallbackUrl = config.llm_base_url?.trim();
+    const baseUrl = (config.llm_embedding_base_url || fallbackUrl)?.trim();
+    const needsCustomEndpoint = provider !== 'openai';
+
+    if (needsCustomEndpoint && !isResolvableBaseUrl(baseUrl)) {
+      setEmbeddingModelSource('fallback');
+      setEmbeddingAvailableModels(config.llm_embedding_model ? [config.llm_embedding_model] : []);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      loadEmbeddingModels();
+    }, 500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [config?.llm_provider, config?.llm_base_url, config?.llm_embedding_base_url, config?.llm_api_key]);
  
   useEffect(() => {
     if (config) {
@@ -213,21 +287,25 @@ const AdminConsole: React.FC = () => {
 
   const loadModels = async () => {
     try {
-      const modelsData = await apiService.getModels();
+      const modelsData = await apiService.getModels('chat');
       setAvailableModels(modelsData.models);
+      setModelSource(modelsData.source);
     } catch (error) {
       console.error('Failed to load models:', error);
-      // Fallback to hardcoded models if API fails
-      setAvailableModels([
-        "gpt-5",
-        "gpt-5-mini", 
-        "gpt-5-nano",
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4",
-        "gpt-4-turbo",
-        "gpt-3.5-turbo"
-      ]);
+      setModelSource('fallback');
+      setAvailableModels(config?.llm_model ? [config.llm_model] : []);
+    }
+  };
+
+  const loadEmbeddingModels = async () => {
+    try {
+      const modelsData = await apiService.getModels('embedding');
+      setEmbeddingAvailableModels(modelsData.models);
+      setEmbeddingModelSource(modelsData.source);
+    } catch (error) {
+      console.error('Failed to load embedding models:', error);
+      setEmbeddingModelSource('fallback');
+      setEmbeddingAvailableModels(config?.llm_embedding_model ? [config.llm_embedding_model] : []);
     }
   };
 
@@ -260,7 +338,18 @@ const AdminConsole: React.FC = () => {
       if (configData.rag_content_scanning === undefined) {
         configData.rag_content_scanning = false;
       }
+      if (!configData.llm_provider) {
+        configData.llm_provider = 'openai';
+      }
+      if (!configData.llm_model) {
+        configData.llm_model = configData.openai_model;
+      }
+      if (!configData.llm_api_key) {
+        configData.llm_api_key = configData.openai_api_key;
+      }
       setConfig(configData);
+      setApiVersionDraft(configData.llm_api_version || '');
+      setEmbeddingApiVersionDraft(configData.llm_embedding_api_version || '');
     } catch (error) {
       console.error('Failed to load config:', error);
       setMessage({ type: 'error', text: 'Failed to load configuration' });
@@ -288,10 +377,18 @@ const AdminConsole: React.FC = () => {
         lakera_blocking_mode: updates.lakera_blocking_mode ?? config.lakera_blocking_mode,
         rag_content_scanning: ragContentScanning,
         rag_lakera_project_id: updates.rag_lakera_project_id ?? config.rag_lakera_project_id,
-        openai_model: updates.openai_model ?? config.openai_model,
+        llm_provider: updates.llm_provider ?? config.llm_provider,
+        llm_base_url: updates.llm_base_url ?? config.llm_base_url,
+        llm_embedding_base_url: updates.llm_embedding_base_url ?? config.llm_embedding_base_url,
+        llm_api_version: updates.llm_api_version ?? config.llm_api_version,
+        llm_embedding_api_version: updates.llm_embedding_api_version ?? config.llm_embedding_api_version,
+        llm_model: updates.llm_model ?? updates.openai_model ?? config.llm_model,
+        llm_embedding_model: updates.llm_embedding_model ?? config.llm_embedding_model,
+        llm_api_key: updates.llm_api_key,
+        openai_model: updates.llm_model ?? updates.openai_model ?? config.openai_model,
         temperature: updates.temperature ?? config.temperature,
         system_prompt: updates.system_prompt ?? config.system_prompt,
-        openai_api_key: updates.openai_api_key,
+        openai_api_key: updates.llm_api_key ?? updates.openai_api_key,
         lakera_api_key: updates.lakera_api_key,
         lakera_project_id: updates.lakera_project_id,
       };
@@ -463,7 +560,7 @@ const AdminConsole: React.FC = () => {
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">1</div>
                     <div>
                       <h4 className="font-medium text-blue-900">Configure API Keys</h4>
-                      <p className="text-sm text-blue-800">Go to the <strong>Security</strong> tab and enter both your OpenAI API key and Lakera API key for content moderation. In the demo, open the prompt interace and ask something simple like "How is your day" to test the API keys.</p>
+                      <p className="text-sm text-blue-800">Go to the <strong>Security</strong> tab and enter your LLM API key plus Lakera API key for content moderation. You can use OpenAI or any OpenAI-compatible endpoint configured in the LLM tab.</p>
                     </div>
                   </div>
                   
@@ -479,7 +576,7 @@ const AdminConsole: React.FC = () => {
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">3</div>
                     <div>
                       <h4 className="font-medium text-blue-900">Configure LLM Settings</h4>
-                      <p className="text-sm text-blue-800">Go to the <strong>LLM</strong> tab to select your OpenAI model, add your system prompt and adjust temperature settings.</p>
+                      <p className="text-sm text-blue-800">Go to the <strong>LLM</strong> tab to choose a provider, configure a compatible base URL if needed, set chat and embedding models, and adjust temperature settings.</p>
                     </div>
                   </div>
                   
@@ -677,22 +774,160 @@ const AdminConsole: React.FC = () => {
           {activeTab === 'llm' && (
             <div className="space-y-6">
               <h2 className="text-lg font-semibold text-gray-900">LLM Configuration</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6 max-w-3xl">
+                {azureProviderSelected && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                    Use this mode when your integration is documented as `AzureOpenAI(azure_endpoint=..., api_key=..., api_version=...)`.
+                    Base URL should be the Azure endpoint root, for example `https://staging-openai.azure-api.net/openai-gw-proxy-dev`.
+                    Chat Model and Embedding Model should be your Azure deployment names.
+                  </div>
+                )}
+                {azureProxyProviderSelected && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    Use this mode only when your gateway expects an exact proxy base path via `base_url=...`.
+                    If your provider gave you an `AzureOpenAI(azure_endpoint=...)` example, use `Azure OpenAI` instead.
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    OpenAI Model
+                    Provider
                   </label>
                   <select
-                    value={config.openai_model}
-                    onChange={(e) => handleConfigUpdate({ openai_model: e.target.value })}
+                    value={config.llm_provider}
+                    onChange={(e) => handleConfigUpdate({ llm_provider: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    {availableModels.map((model) => (
-                      <option key={model} value={model}>
-                        {model.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    {PROVIDER_OPTIONS.map((provider) => (
+                      <option key={provider.value} value={provider.value}>
+                        {provider.label}
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Base URL
+                  </label>
+                  <input
+                    type="url"
+                    value={config.llm_base_url || ''}
+                    onChange={(e) => handleConfigUpdate({ llm_base_url: e.target.value })}
+                    placeholder="http://localhost:11434/v1"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Leave blank for OpenAI. Examples: Ollama `http://localhost:11434/v1`, LM Studio `http://localhost:1234/v1`, Azure `https://YOUR-RESOURCE.openai.azure.com/`, Azure proxy `https://staging-openai.azure-api.net/openai-gw-proxy-dev/`.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    API Version
+                  </label>
+                  <input
+                    type="text"
+                    value={apiVersionDraft}
+                    onChange={(e) => setApiVersionDraft(e.target.value)}
+                    onBlur={() => {
+                      if (apiVersionDraft !== (config.llm_api_version || '')) {
+                        handleConfigUpdate({ llm_api_version: apiVersionDraft });
+                      }
+                    }}
+                    placeholder={config.llm_provider === 'azure_openai' ? '2024-06-01' : 'Optional'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Required for Azure OpenAI and Azure proxy modes. The Chat Model and Embedding Model fields should contain your Azure deployment names.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Embedding Base URL
+                  </label>
+                  <input
+                    type="url"
+                    value={config.llm_embedding_base_url || ''}
+                    onChange={(e) => handleConfigUpdate({ llm_embedding_base_url: e.target.value })}
+                    placeholder="Optional separate embeddings endpoint"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Leave blank to reuse the main base URL. Useful when chat and embeddings are served by different Ollama or llama.cpp endpoints.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Embedding API Version
+                  </label>
+                  <input
+                    type="text"
+                    value={embeddingApiVersionDraft}
+                    onChange={(e) => setEmbeddingApiVersionDraft(e.target.value)}
+                    onBlur={() => {
+                      if (embeddingApiVersionDraft !== (config.llm_embedding_api_version || '')) {
+                        handleConfigUpdate({ llm_embedding_api_version: embeddingApiVersionDraft });
+                      }
+                    }}
+                    placeholder={config.llm_provider === 'azure_openai' || config.llm_provider === 'azure_openai_proxy' ? 'Optional override for embeddings' : 'Optional'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Leave blank to reuse the main API Version. Set this only if your embedding endpoint requires a different version.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Chat Model
+                  </label>
+                  <select
+                    value={config.llm_model}
+                    onChange={(e) => handleConfigUpdate({ llm_model: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {chatModelOptions.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={config.llm_model}
+                    onChange={(e) => handleConfigUpdate({ llm_model: e.target.value })}
+                    placeholder="Enter a custom model name"
+                    className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    {modelSource === 'endpoint' ? 'Discovered from the endpoint. You can still type a custom model name below.' : 'Using fallback/manual mode. Type any compatible model name below.'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Embedding Model
+                  </label>
+                  <select
+                    value={config.llm_embedding_model || ''}
+                    onChange={(e) => handleConfigUpdate({ llm_embedding_model: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Select an embedding model</option>
+                    {embeddingModelOptions.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={config.llm_embedding_model || ''}
+                    onChange={(e) => handleConfigUpdate({ llm_embedding_model: e.target.value })}
+                    placeholder="Enter a custom embedding model name"
+                    className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    {embeddingModelSource === 'endpoint'
+                      ? 'Discovered from the embedding endpoint. You can still type a custom model name below.'
+                      : 'Using fallback/manual mode. Type any compatible embedding model name below.'}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1090,14 +1325,14 @@ const AdminConsole: React.FC = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    OpenAI API Key
+                    LLM API Key
                   </label>
                   <div className="relative">
                     <input
                       type={showOpenAIKey ? "text" : "password"}
-                      value={config.openai_api_key || ""}
-                      onChange={(e) => handleConfigUpdate({ openai_api_key: e.target.value })}
-                      placeholder="sk-..."
+                      value={config.llm_api_key || ""}
+                      onChange={(e) => handleConfigUpdate({ llm_api_key: e.target.value })}
+                      placeholder="Optional for some local endpoints"
                       className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                     <button
@@ -1112,6 +1347,9 @@ const AdminConsole: React.FC = () => {
                       )}
                     </button>
                   </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Used for OpenAI and any compatible endpoint that expects bearer authentication. Local servers often ignore this.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1285,4 +1523,3 @@ const AdminConsole: React.FC = () => {
 };
 
 export default AdminConsole;
-

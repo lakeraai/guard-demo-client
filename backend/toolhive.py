@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -6,6 +7,29 @@ from sqlalchemy.orm import Session
 from . import lakera
 from .database import get_db
 from .models import AppConfig, MCPToolCapabilities, Tool
+
+
+_TOOL_NAME_PATTERN = re.compile(r"[^a-zA-Z0-9_.-]+")
+
+
+def sanitize_tool_name(name: Optional[str], fallback: str = "tool") -> str:
+    """
+    Convert arbitrary tool names into the stricter OpenAI/Azure function-name format.
+    """
+    candidate = (name or "").strip()
+    if not candidate:
+        candidate = fallback
+    candidate = _TOOL_NAME_PATTERN.sub("_", candidate).strip("._-")
+    return candidate or fallback
+
+
+def _resolve_target_tool(tools_list: List[Dict[str, Any]], requested_name: Optional[str]) -> Optional[Dict[str, Any]]:
+    requested = (requested_name or "").lower()
+    for tool in tools_list:
+        original_name = tool.get("name", "")
+        if original_name.lower() == requested or sanitize_tool_name(original_name).lower() == requested:
+            return tool
+    return None
 
 
 def _mcp_error_message(result: Dict[str, Any]) -> str:
@@ -102,11 +126,13 @@ def openai_tools_manifest(db: Session) -> List[Dict[str, Any]]:
             tools_list = discovery.get("tools_list_params_0", {}).get("response", {}).get("result", {}).get("tools", [])
 
             for mcp_tool in tools_list:
+                original_name = mcp_tool.get("name", "unknown")
+                sanitized_name = sanitize_tool_name(original_name, fallback=f"tool_{tool.id}")
                 manifest.append(
                     {
                         "type": "function",
                         "function": {
-                            "name": mcp_tool.get("name", "unknown"),
+                            "name": sanitized_name,
                             "description": mcp_tool.get("description", "")[:512],
                             "parameters": mcp_tool.get("inputSchema", {"type": "object", "properties": {}}),
                         },
@@ -117,16 +143,19 @@ def openai_tools_manifest(db: Session) -> List[Dict[str, Any]]:
                             "db_tool_type": tool.type,
                             "db_tool_endpoint": tool.endpoint,
                             "db_tool_description": tool.description,
+                            "mcp_tool_name": original_name,
+                            "llm_tool_name": sanitized_name,
                         },
                     }
                 )
         else:
+            sanitized_name = sanitize_tool_name(tool.name, fallback=f"tool_{tool.id}")
             # Fallback to basic tool definition
             manifest.append(
                 {
                     "type": "function",
                     "function": {
-                        "name": tool.name,
+                        "name": sanitized_name,
                         "description": tool.description or f"Tool: {tool.name}",
                         "parameters": {"type": "object", "properties": {}},
                     },
@@ -137,6 +166,8 @@ def openai_tools_manifest(db: Session) -> List[Dict[str, Any]]:
                         "db_tool_type": tool.type,
                         "db_tool_endpoint": tool.endpoint,
                         "db_tool_description": tool.description,
+                        "mcp_tool_name": tool.name,
+                        "llm_tool_name": sanitized_name,
                     },
                 }
             )
@@ -168,6 +199,8 @@ async def execute(
         "type": tool_metadata["db_tool_type"],
         "endpoint": tool_metadata["db_tool_endpoint"],
         "description": tool_metadata["db_tool_description"],
+        "mcp_tool_name": tool_metadata.get("mcp_tool_name", tool_name),
+        "llm_tool_name": tool_metadata.get("llm_tool_name", tool_name),
     }
 
     try:
@@ -248,13 +281,13 @@ async def execute_mcp_tool(
     tool: Dict[str, Any], args: Dict[str, Any], db: Session, function_name: str
 ) -> Dict[str, Any]:
     """
-    Execute an MCP tool using our existing OpenAI client and MCP transport
+    Execute an MCP tool using the configured OpenAI-compatible client and MCP transport
     """
     try:
         endpoint = tool["endpoint"]
         print(f"🔧 Executing MCP tool: {tool['name']} at {endpoint}")
 
-        # Use our existing OpenAI client
+        # Use our existing OpenAI-compatible client
         from .mcp import build_transport, mcp_call, mcp_initialize, try_list
         from .openai_client import openai_client
 
@@ -264,9 +297,9 @@ async def execute_mcp_tool(
         if not openai_client.client:
             return {
                 "status": "error",
-                "error": "OpenAI client not configured",
+                "error": "LLM client not configured",
                 "tool_name": tool["name"],
-                "details": "Please configure the OpenAI API key in the admin interface",
+                "details": "Please configure the LLM settings in the admin interface",
             }
 
         # Build the appropriate transport (HTTP or SSE)
@@ -291,11 +324,7 @@ async def execute_mcp_tool(
             # Find the specific tool to call from the tools list
             if tools_list:
                 # Look for the tool by name in the discovered tools (case-insensitive)
-                target_tool = None
-                for t in tools_list:
-                    if t.get("name", "").lower() == function_name.lower():
-                        target_tool = t
-                        break
+                target_tool = _resolve_target_tool(tools_list, function_name)
 
                 if target_tool:
                     print(f"🔧 Found target tool: {target_tool['name']} with args: {args}")
@@ -439,11 +468,7 @@ async def execute_http_tool(tool: Dict[str, Any], args: Dict[str, Any], function
             # Find the specific tool to call from the tools list
             if tools_list:
                 # Look for the tool by name in the discovered tools (case-insensitive)
-                target_tool = None
-                for t in tools_list:
-                    if t.get("name", "").lower() == function_name.lower():
-                        target_tool = t
-                        break
+                target_tool = _resolve_target_tool(tools_list, function_name)
 
                 if target_tool:
                     print(f"🔧 Found target tool: {target_tool['name']} with args: {args}")
@@ -509,11 +534,7 @@ async def execute_http_tool(tool: Dict[str, Any], args: Dict[str, Any], function
                 # Find the specific tool to call from the tools list
                 if tools_list:
                     # Look for the tool by name in the discovered tools (case-insensitive)
-                    target_tool = None
-                    for t in tools_list:
-                        if t.get("name", "").lower() == function_name.lower():
-                            target_tool = t
-                            break
+                    target_tool = _resolve_target_tool(tools_list, function_name)
 
                     if target_tool:
                         print(f"🔧 SSE Found target tool: {target_tool['name']} with args: {args}")
@@ -827,7 +848,7 @@ async def execute_mcp_tool_multi_step(
         endpoint = tool["endpoint"]
         print(f"🔧 Executing MCP tool (multi-step): {tool['name']} at {endpoint}")
 
-        # Use our existing OpenAI client
+        # Use our existing OpenAI-compatible client
         from .mcp import (
             HTTPTransport,
             SSETransport,
@@ -844,9 +865,9 @@ async def execute_mcp_tool_multi_step(
         if not openai_client.client:
             return {
                 "status": "error",
-                "error": "OpenAI client not configured",
+                "error": "LLM client not configured",
                 "tool_name": tool["name"],
-                "details": "Please configure the OpenAI API key in the admin interface",
+                "details": "Please configure the LLM settings in the admin interface",
             }
 
         # Build the appropriate transport (HTTP or SSE)
@@ -881,12 +902,13 @@ async def execute_mcp_tool_multi_step(
             tools_map = {}
             for t in tools_list:
                 if isinstance(t, dict) and "name" in t:
-                    tools_map[t["name"]] = t
+                    sanitized_name = sanitize_tool_name(t["name"])
+                    tools_map[sanitized_name] = t
                     openai_tools.append(
                         {
                             "type": "function",
                             "function": {
-                                "name": t["name"],
+                                "name": sanitized_name,
                                 "description": t.get("description", "")[:512],
                                 "parameters": t.get("inputSchema", {"type": "object", "properties": {}}),
                             },
@@ -905,12 +927,13 @@ async def execute_mcp_tool_multi_step(
 
             # Multi-step tool loop (like mcp_example2.py)
             max_loops = 12  # prevent infinite loops
+            active_model = openai_client.model
             while max_loops > 0:
                 max_loops -= 1
 
                 # Get OpenAI response
                 resp = openai_client.client.chat.completions.create(
-                    model=openai_client.model, messages=messages, tools=openai_tools, tool_choice="auto"
+                    model=active_model, messages=messages, tools=openai_tools, tool_choice="auto"
                 )
 
                 msg = resp.choices[0].message
@@ -950,7 +973,12 @@ async def execute_mcp_tool_multi_step(
 
                     # Call MCP tool
                     try:
-                        result = mcp_call(transport, "tools/call", {"name": name, "arguments": call_args})
+                        original_tool = tools_map.get(name)
+                        if not original_tool:
+                            raise ValueError(f"Unknown MCP tool '{name}'")
+                        result = mcp_call(
+                            transport, "tools/call", {"name": original_tool["name"], "arguments": call_args}
+                        )
 
                         # Moderate result if Lakera is available
                         if lakera_api_key:

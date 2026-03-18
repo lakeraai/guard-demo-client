@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Download, Eye, EyeOff } from 'lucide-react';
+import { X, Eye, EyeOff } from 'lucide-react';
 import { apiService } from '../services/api';
 
 interface GenerateContentModalProps {
