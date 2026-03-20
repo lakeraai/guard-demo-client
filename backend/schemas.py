@@ -27,6 +27,7 @@ class AppConfigBase(BaseModel):
 class AppConfigResponse(AppConfigBase):
     id: int
     openai_api_key: Optional[str] = None
+    litellm_virtual_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
     rag_lakera_project_id: Optional[str] = None
@@ -36,6 +37,7 @@ class AppConfigResponse(AppConfigBase):
 
 class AppConfigUpdate(AppConfigBase):
     openai_api_key: Optional[str] = None
+    litellm_virtual_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
     rag_lakera_project_id: Optional[str] = None

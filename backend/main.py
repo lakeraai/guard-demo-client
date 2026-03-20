@@ -86,8 +86,33 @@ def _migrate_app_config_theme():
 
 
 _migrate_app_config_litellm()
+
+
+def _migrate_app_config_litellm_virtual_key():
+    """Add litellm_virtual_key; one-time copy from openai_api_key for existing LiteLLM rows that used the old single field."""
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "litellm_virtual_key" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN litellm_virtual_key VARCHAR"))
+            conn.commit()
+            conn.execute(
+                text(
+                    """
+                    UPDATE app_config
+                    SET litellm_virtual_key = openai_api_key
+                    WHERE use_litellm = 1
+                      AND (litellm_virtual_key IS NULL OR litellm_virtual_key = '')
+                      AND openai_api_key IS NOT NULL AND openai_api_key != ''
+                    """
+                )
+            )
+            conn.commit()
+
+
 _migrate_demo_prompts_preferred_llm()
 _migrate_app_config_theme()
+_migrate_app_config_litellm_virtual_key()
 
 app = FastAPI(title="Agentic Demo API", description="Backend API for the Agentic Demo application", version="1.0.0")
 
@@ -135,9 +160,9 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
     for field, value in config_update.dict(exclude_unset=True).items():
         setattr(config, field, value)
 
-    # Auto-pick model when saving LiteLLM key: if current model invalid for key, set to first allowed
+    # Auto-pick model when saving LiteLLM virtual key: if current model invalid for key, set to first allowed
     use_litellm = getattr(config, "use_litellm", False)
-    if use_litellm and config.openai_api_key:
+    if use_litellm and getattr(config, "litellm_virtual_key", None):
         allowed = llm_client.get_models(config)
         if allowed and (not config.openai_model or config.openai_model not in allowed):
             config.openai_model = allowed[0]
@@ -155,7 +180,7 @@ EXPORT_SECTIONS = {
     "llm": ["openai_model", "temperature", "system_prompt", "use_litellm", "litellm_base_url"],
     "security": ["lakera_enabled", "lakera_blocking_mode"],
     "rag_scanning": ["rag_content_scanning"],
-    "api_keys": ["openai_api_key", "lakera_api_key"],
+    "api_keys": ["openai_api_key", "litellm_virtual_key", "lakera_api_key"],
     "project_ids": ["lakera_project_id", "rag_lakera_project_id"],
 }
 SAFE_DEFAULT_INCLUDE = ["appearance", "llm", "security", "rag_scanning", "demo_prompts", "tools", "rag"]
@@ -328,6 +353,7 @@ async def import_config(file: UploadFile = File(...), db: Session = Depends(get_
                 db.query(AppConfig).delete()
                 new_config = AppConfig(
                     openai_api_key=config_data.get("openai_api_key"),
+                    litellm_virtual_key=config_data.get("litellm_virtual_key"),
                     lakera_api_key=config_data.get("lakera_api_key"),
                     lakera_project_id=config_data.get("lakera_project_id"),
                     rag_lakera_project_id=config_data.get("rag_lakera_project_id"),
@@ -348,9 +374,13 @@ async def import_config(file: UploadFile = File(...), db: Session = Depends(get_
                 )
                 db.add(new_config)
                 db.flush()
-                # Auto-pick model when imported config has LiteLLM or invalid model for OpenAI
+                # Legacy v1 exports: key may only be in openai_api_key for LiteLLM
                 use_litellm_val = getattr(new_config, "use_litellm", False) or False
-                if use_litellm_val and new_config.openai_api_key:
+                if use_litellm_val and not (getattr(new_config, "litellm_virtual_key", None) or "").strip():
+                    if new_config.openai_api_key:
+                        new_config.litellm_virtual_key = new_config.openai_api_key
+                # Auto-pick model when imported config has LiteLLM or invalid model for OpenAI
+                if use_litellm_val and getattr(new_config, "litellm_virtual_key", None):
                     allowed = llm_client.get_models(new_config)
                     if allowed and (not new_config.openai_model or new_config.openai_model not in allowed):
                         new_config.openai_model = allowed[0]
@@ -498,6 +528,18 @@ async def import_config(file: UploadFile = File(...), db: Session = Depends(get_
                     for field in fields:
                         if field in config_data:
                             setattr(config_row, field, config_data[field])
+                # Older exports may store the LiteLLM key only in openai_api_key
+                use_lm = getattr(config_row, "use_litellm", False)
+                if use_lm and not (getattr(config_row, "litellm_virtual_key", None) or "").strip():
+                    if getattr(config_row, "openai_api_key", None):
+                        config_row.litellm_virtual_key = config_row.openai_api_key
+                # Auto-pick model (same as PUT /api/config)
+                if use_lm and getattr(config_row, "litellm_virtual_key", None):
+                    allowed = llm_client.get_models(config_row)
+                    if allowed and (not config_row.openai_model or config_row.openai_model not in allowed):
+                        config_row.openai_model = allowed[0]
+                elif not use_lm and config_row.openai_model not in llm_client.STATIC_MODELS:
+                    config_row.openai_model = llm_client.STATIC_MODELS[0]
 
             if "tools" in includes:
                 tools_path = os.path.join(temp_dir, "tools.json")

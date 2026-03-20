@@ -25,6 +25,8 @@ class AppConfig(Base):
     lakera_blocking_mode = Column(Boolean, default=False)
     use_litellm = Column(Boolean, default=False)
     litellm_base_url = Column(String, nullable=True)
+    # LiteLLM proxy virtual key (when use_litellm); separate from direct OpenAI key
+    litellm_virtual_key = Column(String, nullable=True)
     rag_content_scanning = Column(Boolean, default=False)
     rag_lakera_project_id = Column(String, nullable=True)
     # UI theming

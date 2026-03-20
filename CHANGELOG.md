@@ -4,12 +4,13 @@
 
 ### Added
 
+- **`litellm_virtual_key` on `AppConfig`** – LiteLLM virtual key is stored separately from `openai_api_key`; startup migration copies the old single field into `litellm_virtual_key` once for existing LiteLLM installs.
 - **LiteLLM proxy support** – Use either an OpenAI API key or a LiteLLM virtual key (Admin → Security).
 - **Unified LLM client** (`backend/llm_client.py`) – Routes chat, embeddings, and model listing to OpenAI or LiteLLM based on config.
 - **Key-specific model list** – When using LiteLLM, the model dropdown shows only models allowed for the current virtual key (fetched from `/v1/models`).
 - **Auto-pick model on save** – Saving a LiteLLM key with an invalid model (e.g. `gpt-4o-mini` when key only allows `ollama-phi3`) auto-selects the first allowed model.
 - **Auto-pick on config import** – Same logic runs when importing a config with LiteLLM or an invalid model for direct OpenAI.
-- **Admin UI** – Security tab: "Use LiteLLM proxy" toggle, dynamic key label, optional LiteLLM base URL.
+- **Admin UI** – Security tab: "Use LiteLLM proxy" toggle, separate OpenAI vs LiteLLM virtual key inputs (no cross-copy on toggle), optional LiteLLM base URL.
 - **LLM tab** – Model dropdown restricted to allowed models; warning if current model is not available.
 - **`.env.example`** – Template for LiteLLM UI credentials and optional Lakera/LiteLLM overrides.
 

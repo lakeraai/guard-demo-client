@@ -20,6 +20,7 @@ const AdminConsole: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [showOpenAIKey, setShowOpenAIKey] = useState(false);
+  const [showLitellmVirtualKey, setShowLitellmVirtualKey] = useState(false);
   const [showLakeraKey, setShowLakeraKey] = useState(false);
   const [showMCPInstructions, setShowMCPInstructions] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -298,7 +299,8 @@ const AdminConsole: React.FC = () => {
         openai_model: updates.openai_model ?? config.openai_model,
         temperature: updates.temperature ?? config.temperature,
         system_prompt: updates.system_prompt ?? config.system_prompt,
-        openai_api_key: updates.openai_api_key,
+        openai_api_key: updates.openai_api_key ?? config.openai_api_key,
+        litellm_virtual_key: updates.litellm_virtual_key ?? config.litellm_virtual_key,
         lakera_api_key: updates.lakera_api_key,
         lakera_project_id: updates.lakera_project_id,
         use_litellm: updates.use_litellm ?? config.use_litellm,
@@ -1146,31 +1148,63 @@ const AdminConsole: React.FC = () => {
                     />
                   </div>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {(config.use_litellm ?? false) ? 'LiteLLM virtual key' : 'OpenAI API key'}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showOpenAIKey ? "text" : "password"}
-                      value={config.openai_api_key || ""}
-                      onChange={(e) => handleConfigUpdate({ openai_api_key: e.target.value })}
-                      placeholder={config.use_litellm ? "sk-..." : "sk-..."}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowOpenAIKey(!showOpenAIKey)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                    >
-                      {showOpenAIKey ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
+                {!(config.use_litellm ?? false) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      OpenAI API key
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showOpenAIKey ? "text" : "password"}
+                        value={config.openai_api_key || ""}
+                        onChange={(e) => handleConfigUpdate({ openai_api_key: e.target.value })}
+                        placeholder="sk-..."
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowOpenAIKey(!showOpenAIKey)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                      >
+                        {showOpenAIKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
+                {(config.use_litellm ?? false) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      LiteLLM virtual key
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Optional for some proxies; used as the Bearer token when set.
+                    </p>
+                    <div className="relative">
+                      <input
+                        type={showLitellmVirtualKey ? "text" : "password"}
+                        value={config.litellm_virtual_key || ""}
+                        onChange={(e) => handleConfigUpdate({ litellm_virtual_key: e.target.value })}
+                        placeholder="sk-... or leave empty"
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLitellmVirtualKey(!showLitellmVirtualKey)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                      >
+                        {showLitellmVirtualKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Lakera API Key

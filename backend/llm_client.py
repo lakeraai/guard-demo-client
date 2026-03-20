@@ -27,6 +27,27 @@ STATIC_MODELS = [
 ]
 
 
+def effective_llm_api_key(cfg: Optional[AppConfig]) -> Optional[str]:
+    """
+    Bearer / API key for the current mode: direct OpenAI uses openai_api_key;
+    LiteLLM proxy uses litellm_virtual_key (may be empty string if unset).
+    """
+    if not cfg:
+        return None
+    if getattr(cfg, "use_litellm", False):
+        return getattr(cfg, "litellm_virtual_key", None) or ""
+    return cfg.openai_api_key
+
+
+def llm_credentials_configured(cfg: Optional[AppConfig]) -> bool:
+    """OpenAI direct mode requires an API key; LiteLLM mode allows an empty virtual key."""
+    if not cfg:
+        return False
+    if getattr(cfg, "use_litellm", False):
+        return True
+    return bool(cfg.openai_api_key)
+
+
 def _get_config() -> Optional[AppConfig]:
     """Load config from database"""
     db = next(get_db())
@@ -116,9 +137,11 @@ def chat_completion(
     if not cfg:
         raise Exception("Configure LLM API key in Admin → Security")
 
-    api_key = cfg.openai_api_key
-    if not api_key:
+    use_litellm = getattr(cfg, "use_litellm", False)
+    if not use_litellm and not cfg.openai_api_key:
         raise Exception("Configure LLM API key in Admin → Security")
+
+    api_key = effective_llm_api_key(cfg) or ""
 
     try:
         temp_float = float(temperature) if temperature is not None else 0.7
@@ -128,7 +151,6 @@ def chat_completion(
     if temp_float > 1.0:
         temp_float = temp_float / 10.0
 
-    use_litellm = getattr(cfg, "use_litellm", False)
     litellm_base_url = getattr(cfg, "litellm_base_url", None) or "http://localhost:4000"
 
     try:
@@ -165,11 +187,12 @@ def get_embeddings(texts: List[str], config: Optional[AppConfig] = None) -> List
     if not cfg:
         raise Exception("Configure LLM API key in Admin → Security")
 
-    api_key = cfg.openai_api_key
-    if not api_key:
+    use_litellm = getattr(cfg, "use_litellm", False)
+    if not use_litellm and not cfg.openai_api_key:
         raise Exception("Configure LLM API key in Admin → Security")
 
-    use_litellm = getattr(cfg, "use_litellm", False)
+    api_key = effective_llm_api_key(cfg) or ""
+
     litellm_base_url = getattr(cfg, "litellm_base_url", None) or "http://localhost:4000"
 
     try:
@@ -224,7 +247,7 @@ def get_models(config: Optional[AppConfig] = None) -> List[str]:
     if not cfg:
         return STATIC_MODELS
     use_litellm = getattr(cfg, "use_litellm", False)
-    api_key = cfg.openai_api_key
+    api_key = effective_llm_api_key(cfg)
     if not use_litellm or not api_key:
         return STATIC_MODELS
     litellm_base_url = getattr(cfg, "litellm_base_url", None) or "http://localhost:4000"

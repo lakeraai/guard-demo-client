@@ -259,7 +259,7 @@ async def execute_mcp_tool(
         from .models import AppConfig
 
         config = db.query(AppConfig).first()
-        if not config or not config.openai_api_key:
+        if not config or not llm_client.llm_credentials_configured(config):
             return {
                 "status": "error",
                 "error": "LLM client not configured",
@@ -837,7 +837,7 @@ async def execute_mcp_tool_multi_step(
         from .models import AppConfig
 
         config = db.query(AppConfig).first()
-        if not config or not config.openai_api_key:
+        if not config or not llm_client.llm_credentials_configured(config):
             return {
                 "status": "error",
                 "error": "LLM client not configured",
