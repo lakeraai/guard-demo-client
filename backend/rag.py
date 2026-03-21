@@ -12,9 +12,9 @@ import chromadb
 from chromadb.config import Settings
 
 from .database import get_db
+from . import llm_client
 from .lakera import check_interaction
 from .models import AppConfig, RagSource
-from .openai_client import openai_client
 
 # Global variables to store RAG scanning results and progress
 _last_rag_scanning_result: Optional[Dict[str, Any]] = None
@@ -332,7 +332,7 @@ async def retrieve(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
     """
     try:
         # Get embeddings for the query
-        query_embeddings = openai_client.get_embeddings([query])
+        query_embeddings = llm_client.get_embeddings([query])
 
         # Search in ChromaDB
         results = collection.query(query_embeddings=query_embeddings, n_results=top_k)
@@ -520,11 +520,14 @@ Constraints: {options.get("constraints", "")}
 
 {seed_prompt}"""
 
-        # Call OpenAI to generate content
+        # Call LLM to generate content
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
-        response = openai_client.chat_completion(
-            messages=messages, model=config.openai_model, temperature=float(config.temperature) / 10.0
+        response = llm_client.chat_completion(
+            messages=messages,
+            model=config.openai_model,
+            temperature=config.temperature,
+            config=config,
         )
 
         markdown = response["choices"][0]["message"]["content"]
@@ -684,7 +687,7 @@ async def ingest_with_smart_chunking(
                 return {"source_id": "error", "chunks": 0, "metadata": source_meta}
 
             print(f"🔍 Getting embeddings for {len(valid_chunks)} valid chunks (filtered from {len(chunks)} total)")
-            embeddings = openai_client.get_embeddings(valid_chunks)
+            embeddings = llm_client.get_embeddings(valid_chunks)
 
             # Update chunks and metadata to match valid chunks
             if len(valid_chunks) != len(chunks):

@@ -17,15 +17,15 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 
 - **Frontend**: Vite + React + TypeScript + Tailwind CSS
 - **Backend**: FastAPI + SQLite + ChromaDB
-- **LLM**: OpenAI (chat + embeddings)
+- **LLM**: OpenAI or LiteLLM proxy (chat + embeddings)
 - **Vector DB**: ChromaDB for RAG
 - **Security**: Lakera Guard for content moderation
 
 ## 📋 Prerequisites
 
-- Python 3.8+
+- Python 3.8–3.12 (3.13+ may break some deps like pandas; use `pyenv` or Homebrew `python@3.12` if needed)
 - Node.js 16+
-- OpenAI API key
+- **OpenAI API key** or **LiteLLM virtual key** (either works; use Admin → Security to configure)
 - Lakera API key (optional)
 
 ## 🛠️ Installation
@@ -101,12 +101,34 @@ python start_backend.py
 npm run dev
 ```
 
+**Terminal 3 - LiteLLM (optional):**
+
+LiteLLM runs as a separate proxy for virtual keys and model management. Default config uses `postgresql://litellm:litellm@localhost:5433/litellm` and UI login `admin` / `demo` (from `.env`).
+
+1. **One-time setup** (from project root, with venv activated). This creates `.env` from `.env.example` if needed and generates the LiteLLM Prisma client:
+   ```bash
+   cp .env.example .env
+   ./scripts/setup_litellm.sh
+   ```
+
+2. **If your Postgres or UI credentials differ:** edit `litellm/config.yaml` (e.g. `general_settings.database_url`) and `.env` (`UI_USERNAME`, `UI_PASSWORD`).
+
+3. **Start the LiteLLM proxy** in Terminal 3:
+   ```bash
+   litellm --config litellm/config.yaml
+   ```
+
+4. Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and mint keys there. Master key for API: `sk-demo-master-key` (or set `LITELLM_MASTER_KEY` in `.env`).
+
+5. **Ollama (optional):** The config includes `ollama-llama` and `ollama-mistral`. Run [Ollama](https://ollama.ai) locally (`ollama run llama3.2`, etc.), then use these models via the LiteLLM proxy.
+
 ## 🌐 Access Points
 
 - **Demo Page**: http://localhost:3000
 - **Admin Console**: http://localhost:3000/admin
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs (if available)
+- **LiteLLM Proxy** (optional): http://localhost:4000 — **LiteLLM UI**: http://localhost:4000/ui
 
 ## ⚙️ Configuration
 
@@ -209,7 +231,7 @@ guard-demo-client/
 │   ├── models.py           # SQLAlchemy models
 │   ├── schemas.py          # Pydantic schemas
 │   ├── database.py         # Database connection
-│   ├── openai_client.py    # OpenAI integration
+│   ├── llm_client.py       # LLM integration (OpenAI or LiteLLM proxy)
 │   ├── rag.py              # RAG service, ChromaDB
 │   ├── lakera.py           # Lakera integration
 │   ├── toolhive.py         # ToolHive service
@@ -307,6 +329,10 @@ The ZIP contains `metadata.json` (version 2.0, list of included sections), `conf
 
 - For **demo prompts** to be in the export, include the **Demo prompts** section when exporting. Re-export after adding prompts if your current ZIP was created before that change.
 - **v1.0** ZIPs (no `metadata.json` version 2.0 or old format) are still supported: full replace behavior, and demo prompts can be read from `demo_prompts.json` or from `data/agentic_demo.db` inside the ZIP.
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for recent changes (LiteLLM integration, model selection).
 
 ## 🐛 Troubleshooting
 

@@ -1,0 +1,23 @@
+# LiteLLM Proxy config – no API keys or models in file; add those via UI (http://localhost:4000/ui).
+# Edit database_url below if your Postgres is elsewhere. UI login: set UI_USERNAME and UI_PASSWORD in .env.
+# See: https://docs.litellm.ai/docs/proxy/config_settings and https://docs.litellm.ai/docs/proxy/ui
+
+general_settings:
+  master_key: sk-demo-master-key
+  database_url: postgresql://litellm:litellm@localhost:5432/litellm
+  forward_client_headers_to_llm_api: true  # Forwards OAuth token to Anthropic (no API key needed)
+
+litellm_settings:
+  drop_params: true
+
+model_list:
+  - model_name: anthropic-claude
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+  # Ollama – requires Ollama running at http://localhost:11434
+  # Note: llama3.2 uses bfloat16 and can fail on Mac Metal (bfloat/half mismatch).
+  # Use phi3, mistral, or gemma2 for reliable Metal GPU support.
+  - model_name: ollama-phi3
+    litellm_params:
+      model: ollama_chat/phi3
+      api_base: http://localhost:11434

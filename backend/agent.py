@@ -3,9 +3,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import lakera, rag, toolhive
+from . import lakera, llm_client, rag, toolhive
 from .models import AppConfig
-from .openai_client import openai_client
 
 
 class AgentRequest(BaseModel):
@@ -83,17 +82,16 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
         messages.append({"role": "system", "content": f"Context information:\n{context_text}"})
 
     # Add user message
-    messages.append({"role": "user", "content": req.message})  # Step 4: Call OpenAI with tools
-    try:
-        # Reload config to get latest API key
-        openai_client._load_config()
+    messages.append({"role": "user", "content": req.message})
 
-        # First call to OpenAI with tools manifest
-        response = openai_client.chat_completion(
+    # Step 4: Call LLM with tools
+    try:
+        response = llm_client.chat_completion(
             messages=messages,
             model=cfg.openai_model,
             temperature=cfg.temperature,
             tools=tools_manifest if tools_manifest else None,
+            config=cfg,
         )
 
         # Extract the response
@@ -161,10 +159,13 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
                 # Add to tool traces
                 tool_traces.append({"id": tool_call_id, "name": tool_name, "args": parsed_args, "result": tool_result})
 
-            # Make second call to OpenAI with tool results
-            print("🔧 Making follow-up call to OpenAI with tool results")
-            final_response = openai_client.chat_completion(
-                messages=messages, model=cfg.openai_model, temperature=cfg.temperature
+            # Make second call to LLM with tool results
+            print("🔧 Making follow-up call to LLM with tool results")
+            final_response = llm_client.chat_completion(
+                messages=messages,
+                model=cfg.openai_model,
+                temperature=cfg.temperature,
+                config=cfg,
             )
 
             # Get final response

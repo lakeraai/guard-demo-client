@@ -9,6 +9,8 @@ export interface AppConfig {
   theme?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
+  use_litellm?: boolean;
+  litellm_base_url?: string;
   rag_content_scanning: boolean;
   rag_lakera_project_id?: string;
   lakera_project_id?: string;
@@ -16,6 +18,7 @@ export interface AppConfig {
   temperature: number;
   system_prompt?: string;
   openai_api_key?: string;
+  litellm_virtual_key?: string;
   lakera_api_key?: string;
   created_at: string;
   updated_at: string;
@@ -30,12 +33,15 @@ export interface AppConfigUpdate {
   theme?: string;
   lakera_enabled: boolean;
   lakera_blocking_mode: boolean;
+  use_litellm?: boolean;
+  litellm_base_url?: string;
   rag_content_scanning: boolean;
   rag_lakera_project_id?: string;
   openai_model: string;
   temperature: number;
   system_prompt?: string;
   openai_api_key?: string;
+  litellm_virtual_key?: string;
   lakera_api_key?: string;
   lakera_project_id?: string;
 }

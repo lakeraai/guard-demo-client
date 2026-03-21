@@ -13,6 +13,8 @@ class AppConfigBase(BaseModel):
     logo_url: Optional[str] = None
     lakera_enabled: bool = True
     lakera_blocking_mode: bool = False
+    use_litellm: bool = False
+    litellm_base_url: Optional[str] = None
     rag_content_scanning: bool = False
     rag_lakera_project_id: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
@@ -25,6 +27,7 @@ class AppConfigBase(BaseModel):
 class AppConfigResponse(AppConfigBase):
     id: int
     openai_api_key: Optional[str] = None
+    litellm_virtual_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
     rag_lakera_project_id: Optional[str] = None
@@ -34,9 +37,12 @@ class AppConfigResponse(AppConfigBase):
 
 class AppConfigUpdate(AppConfigBase):
     openai_api_key: Optional[str] = None
+    litellm_virtual_key: Optional[str] = None
     lakera_api_key: Optional[str] = None
     lakera_project_id: Optional[str] = None
     rag_lakera_project_id: Optional[str] = None
+    use_litellm: Optional[bool] = None
+    litellm_base_url: Optional[str] = None
 
 
 # Chat schemas
