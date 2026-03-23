@@ -1,23 +1,155 @@
-# LiteLLM Proxy config – no API keys or models in file; add those via UI (http://localhost:4000/ui).
+# LiteLLM Proxy config – models + guardrails for demo flow.
 # Edit database_url below if your Postgres is elsewhere. UI login: set UI_USERNAME and UI_PASSWORD in .env.
 # See: https://docs.litellm.ai/docs/proxy/config_settings and https://docs.litellm.ai/docs/proxy/ui
 
 general_settings:
   master_key: sk-demo-master-key
   database_url: postgresql://litellm:litellm@localhost:5432/litellm
-  forward_client_headers_to_llm_api: true  # Forwards OAuth token to Anthropic (no API key needed)
+  forward_client_headers_to_llm_api: true
+  store_model_in_db: true
+  store_prompts_in_spend_logs: true
 
 litellm_settings:
   drop_params: true
 
 model_list:
-  - model_name: anthropic-claude
+  - model_name: gpt-4o-2024-05-13
     litellm_params:
-      model: anthropic/claude-sonnet-4-6
-  # Ollama – requires Ollama running at http://localhost:11434
-  # Note: llama3.2 uses bfloat16 and can fail on Mac Metal (bfloat/half mismatch).
-  # Use phi3, mistral, or gemma2 for reliable Metal GPU support.
-  - model_name: ollama-phi3
+      model: azure/gpt-4o-2024-05-13
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-4o-2024-08-06
     litellm_params:
-      model: ollama_chat/phi3
-      api_base: http://localhost:11434
+      model: azure/gpt-4o-2024-08-06
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-4o-2024-11-20
+    litellm_params:
+      model: azure/gpt-4o-2024-11-20
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-4o-mini-2024-07-18
+    litellm_params:
+      model: azure/gpt-4o-mini-2024-07-18
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-4.1-2025-04-14
+    litellm_params:
+      model: azure/gpt-4.1-2025-04-14
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-4.1-mini-2025-04-14
+    litellm_params:
+      model: azure/gpt-4.1-mini-2025-04-14
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-4.1-nano-2025-04-14
+    litellm_params:
+      model: azure/gpt-4.1-nano-2025-04-14
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-5-2025-08-07
+    litellm_params:
+      model: azure/gpt-5-2025-08-07
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-5-mini-2025-08-07
+    litellm_params:
+      model: azure/gpt-5-mini-2025-08-07
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-5-nano-2025-08-07
+    litellm_params:
+      model: azure/gpt-5-nano-2025-08-07
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-5.1-2025-11-13
+    litellm_params:
+      model: azure/gpt-5.1-2025-11-13
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-5.2-2025-12-11
+    litellm_params:
+      model: azure/gpt-5.2-2025-12-11
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: gpt-5.4-2026-03-05
+    litellm_params:
+      model: azure/gpt-5.4-2026-03-05
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: o1-2024-12-17
+    litellm_params:
+      model: azure/o1-2024-12-17
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: o3-2025-04-16
+    litellm_params:
+      model: azure/o3-2025-04-16
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: o3-mini-2025-01-31
+    litellm_params:
+      model: azure/o3-mini-2025-01-31
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: o4-mini-2025-04-16
+    litellm_params:
+      model: azure/o4-mini-2025-04-16
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: text-embedding-ada-002
+    litellm_params:
+      model: azure/text-embedding-ada-002
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: text-embedding-3-large
+    litellm_params:
+      model: azure/text-embedding-3-large
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+  - model_name: text-embedding-3-small
+    litellm_params:
+      model: azure/text-embedding-3-small
+      api_base: https://staging-openai.azure-api.net/openai-gw-proxy-app/
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-04-01-preview"
+
+guardrails:
+  - guardrail_name: "lakera-guard-block"
+    litellm_params:
+      guardrail: lakera_v2
+      default_on: false
+      mode: "post_call"
+      on_flagged: "block"
+      api_key: os.environ/LAKERA_API_KEY
+      api_base: os.environ/LAKERA_API_BASE
+      project_id: os.environ/LAKERA_PROJECT_ID
+  - guardrail_name: "lakera-guard-monitor"
+    litellm_params:
+      guardrail: lakera_v2
+      default_on: false
+      mode: "post_call"
+      on_flagged: "monitor"
+      api_key: os.environ/LAKERA_API_KEY
+      api_base: os.environ/LAKERA_API_BASE
+      project_id: os.environ/LAKERA_PROJECT_ID
