@@ -123,6 +123,8 @@ LiteLLM uses `litellm/litellm-database:v1.82.3` (default) and PostgreSQL on `loc
    ```
 4. Open **http://localhost:4000/ui** and sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`.
 
+**Reuse behavior:** if LiteLLM is already running at `LITELLM_BASE_URL` (default `http://localhost:4000`), startup reuses it and does not launch another LiteLLM container.
+
 Useful scripts:
 
 ```bash
