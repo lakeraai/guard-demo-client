@@ -270,10 +270,12 @@ def _openai_runtime_compatible() -> bool:
 
 
 def _submodule_runtime_compatible() -> bool:
-    """OpenAI + deps the LiteLLM proxy imports at startup (submodule revisions add these often)."""
+    """OpenAI + proxy-critical deps LiteLLM imports at startup."""
     if not _openai_runtime_compatible():
         return False
-    for mod in ("fastuuid", "orjson"):
+    # Keep this list focused on modules that have repeatedly caused proxy boot failures.
+    required_modules = ("fastuuid", "orjson", "apscheduler")
+    for mod in required_modules:
         try:
             importlib.import_module(mod)
         except ImportError:

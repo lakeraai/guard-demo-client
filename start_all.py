@@ -11,7 +11,7 @@ import time
 import signal
 import threading
 import socket
-import httpx
+import urllib.request
 from pathlib import Path
 
 def print_banner():
@@ -113,18 +113,16 @@ def is_port_open(host: str, port: int, timeout: float = 0.8) -> bool:
 
 def is_backend_healthy() -> bool:
     try:
-        with httpx.Client(timeout=1.5) as client:
-            r = client.get("http://localhost:8000/health")
-        return r.status_code == 200
+        with urllib.request.urlopen("http://localhost:8000/health", timeout=1.5) as r:
+            return r.status == 200
     except Exception:
         return False
 
 
 def is_frontend_reachable() -> bool:
     try:
-        with httpx.Client(timeout=1.5) as client:
-            r = client.get("http://localhost:3000")
-        return r.status_code < 500
+        with urllib.request.urlopen("http://localhost:3000", timeout=1.5) as r:
+            return r.status < 500
     except Exception:
         return False
 
