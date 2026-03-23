@@ -10,6 +10,8 @@ import os
 import time
 import signal
 import threading
+import socket
+import urllib.request
 from pathlib import Path
 
 def print_banner():
@@ -100,6 +102,31 @@ def start_backend():
     except Exception as e:
         print(f"❌ Backend server failed: {e}")
 
+
+def is_port_open(host: str, port: int, timeout: float = 0.8) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def is_backend_healthy() -> bool:
+    try:
+        with urllib.request.urlopen("http://localhost:8000/health", timeout=1.5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def is_frontend_reachable() -> bool:
+    try:
+        with urllib.request.urlopen("http://localhost:3000", timeout=1.5) as r:
+            return r.status < 500
+    except Exception:
+        return False
+
+
 def start_frontend():
     """Start the frontend development server."""
     print("🚀 Starting frontend server...")
@@ -127,18 +154,42 @@ def main():
     if not install_frontend_deps():
         print("❌ Frontend dependency installation failed.")
         sys.exit(1)
+
+    from backend.litellm_bootstrap import maybe_bootstrap_litellm
+
+    maybe_bootstrap_litellm(Path(__file__).resolve().parent)
     
     print("\n🎯 Starting services...")
     print("Press Ctrl+C to stop all services\n")
-    
-    # Start backend in a separate thread
-    backend_thread = threading.Thread(target=start_backend, daemon=True)
-    backend_thread.start()
-    
-    # Wait a moment for backend to start
-    time.sleep(3)
-    
-    # Start frontend
+
+    backend_started_by_script = False
+    backend_thread = None
+    backend_port_in_use = is_port_open("localhost", 8000)
+    if backend_port_in_use and is_backend_healthy():
+        print("ℹ️ Backend already running on http://localhost:8000; reusing existing server")
+    elif backend_port_in_use:
+        print("❌ Port 8000 is in use by a non-demo process. Free the port and retry.")
+        sys.exit(1)
+    else:
+        backend_thread = threading.Thread(target=start_backend, daemon=True)
+        backend_thread.start()
+        backend_started_by_script = True
+        time.sleep(3)
+
+    frontend_port_in_use = is_port_open("localhost", 3000)
+    if frontend_port_in_use and is_frontend_reachable():
+        print("ℹ️ Frontend already running on http://localhost:3000; reusing existing server")
+        if backend_started_by_script and backend_thread:
+            try:
+                backend_thread.join()
+            except KeyboardInterrupt:
+                print("\n🛑 Shutting down...")
+                sys.exit(0)
+        return
+    if frontend_port_in_use:
+        print("❌ Port 3000 is in use by a non-demo process. Free the port and retry.")
+        sys.exit(1)
+
     try:
         start_frontend()
     except KeyboardInterrupt:
