@@ -8,6 +8,13 @@ cd "$ROOT"
 echo "LiteLLM setup"
 echo ""
 
+if [ -d "third_party/litellm/.git" ] || [ -f ".gitmodules" ]; then
+  if [ ! -f "third_party/litellm/litellm/proxy/proxy_cli.py" ]; then
+    echo "Initializing LiteLLM submodule..."
+    git submodule update --init --recursive
+  fi
+fi
+
 # 1. Ensure .env exists
 if [ ! -f .env ]; then
   if [ -f .env.example ]; then
@@ -43,5 +50,5 @@ echo ""
 echo "Next steps:"
 echo "  1. If your Postgres URL or UI login differs: edit litellm/config.yaml (database_url) and .env (UI_USERNAME, UI_PASSWORD)."
 echo "  2. In a new terminal (Terminal 3), run:"
-echo "     litellm --config litellm/config.yaml"
+echo "     python third_party/litellm/litellm/proxy/proxy_cli.py --config litellm/config.yaml"
 echo "  3. Open http://localhost:4000/ui and sign in (UI_USERNAME / UI_PASSWORD from .env)."

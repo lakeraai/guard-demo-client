@@ -76,7 +76,7 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({ onUploadStart, onUpload
         );
       }
     }
-  }, [onUploadComplete]);
+  }, [onUploadComplete, onUploadStart]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

@@ -18,6 +18,10 @@ Step-by-step from the README. Do these in order.
 
 1. **Open the project in Cursor**  
    File → Open Folder → select `guard-demo-client`.
+   Then initialize submodules:
+   ```bash
+   git submodule update --init --recursive
+   ```
 
 2. **Create and activate a virtual environment**
    ```bash
@@ -39,7 +43,7 @@ Step-by-step from the README. Do these in order.
 
 4. **Configure the app**
    - Open **http://localhost:3000/admin**
-   - **Security** tab: add your **OpenAI API key** or **LiteLLM virtual key** (required); optionally Lakera API key
+   - **Security** tab: add your **OpenAI API key** or **LiteLLM API key** (master or virtual, required); optionally Lakera API key
    - Use other tabs for branding, LLM, RAG, tools, demo prompts
 
 ---
@@ -74,9 +78,10 @@ If you use the LiteLLM proxy instead of direct OpenAI:
 
 1. Start the LiteLLM proxy (see "Optional: LiteLLM proxy" below).
 2. In **Admin → Security**, enable **Use LiteLLM proxy**.
-3. Paste your **LiteLLM virtual key** (from http://localhost:4000/ui) into the API key field.
+3. Paste your **LiteLLM API key** (virtual or master, from http://localhost:4000/ui) into the API key field.
 4. Optionally set **LiteLLM base URL** if your proxy runs elsewhere (default: `http://localhost:4000`).
 5. **Model selection**: The app fetches models allowed for your key from the proxy. The LLM tab dropdown shows only valid models. If you save a key with an invalid model selected, the app auto-picks the first allowed model.
+6. **RAG embeddings in LiteLLM mode**: Ensure LiteLLM has an embedding-capable model route. If needed, set `LITELLM_EMBEDDING_MODEL` in your environment.
 
 ---
 
@@ -91,6 +96,7 @@ Only if you want the LiteLLM proxy for virtual keys and model management.
 2. **One-time setup** (from project root, with venv activated)
    ```bash
    cp .env.example .env
+   git submodule update --init --recursive
    ./scripts/setup_litellm.sh
    ```
    Edit `.env` if you want different `UI_USERNAME` / `UI_PASSWORD`.  
@@ -102,6 +108,8 @@ Only if you want the LiteLLM proxy for virtual keys and model management.
    litellm --config litellm/config.yaml
    ```
 
+   Note: `python start_all.py` and `python start_backend.py` now attempt to auto-check/start Postgres + LiteLLM (can be disabled with `DEMO_LITELLM_BOOTSTRAP=0`).
+
 4. **Use the UI**  
    Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and create keys. API master key: `sk-demo-master-key` (or set `LITELLM_MASTER_KEY` in `.env`).
 
@@ -110,7 +118,7 @@ Only if you want the LiteLLM proxy for virtual keys and model management.
    ```bash
    export LAKERA_API_KEY=your-lakera-api-key
    ```
-   Then `source .env` before starting LiteLLM. The guardrail runs on every request (`default_on: true`). Get a key at [platform.lakera.ai](https://platform.lakera.ai).  
+   Then `source .env` before starting LiteLLM. This repo’s `litellm/config.yaml` defines two named guardrails: `lakera-guard-block` and `lakera-guard-monitor` (`on_flagged: block` vs `monitor`). The demo app selects which name to send based on **Admin → Security → Lakera blocking**; LiteLLM’s documented API does not set `on_flagged` per request. Get a key at [platform.lakera.ai](https://platform.lakera.ai).  
    Note: Lakera v2 is documented for `/v1/chat/completions`; Claude Code uses `/v1/messages`—guardrail support may vary.
 
 ---

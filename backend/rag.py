@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import chromadb
 from chromadb.config import Settings
+from chromadb.errors import InvalidDimensionException
 
 from .database import get_db
 from . import llm_client
@@ -384,6 +385,14 @@ async def retrieve(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
                 # Fall back to regular search
 
         return documents
+    except InvalidDimensionException as e:
+        print(
+            "RAG retrieval error: embedding vector size does not match this Chroma collection "
+            f"({e}). Clear or re-import RAG data, or align embedding settings: use the same model "
+            "as when documents were ingested (OPENAI_EMBEDDING_MODEL / LITELLM_EMBEDDING_MODEL; "
+            "for text-embedding-3-* optionally set EMBEDDING_DIMENSIONS, e.g. 1536 to match ada-002)."
+        )
+        return []
     except Exception as e:
         print(f"RAG retrieval error: {e}")
         return []
@@ -689,18 +698,15 @@ async def ingest_with_smart_chunking(
             print(f"🔍 Getting embeddings for {len(valid_chunks)} valid chunks (filtered from {len(chunks)} total)")
             embeddings = llm_client.get_embeddings(valid_chunks)
 
-            # Update chunks and metadata to match valid chunks
+            # Keep stored documents aligned with the strings we embedded (stripped / filtered).
             if len(valid_chunks) != len(chunks):
                 print(f"⚠️ Filtered chunks: {len(chunks)} -> {len(valid_chunks)}")
-                # Re-filter metadata to match valid chunks
-                filtered_metadata = []
                 valid_chunk_metadata = []
                 for _i, (chunk, meta) in enumerate(zip(chunks, chunk_metadata, strict=True)):
                     if chunk and isinstance(chunk, str) and chunk.strip():
-                        filtered_metadata.append(meta)
                         valid_chunk_metadata.append(meta)
                 chunk_metadata = valid_chunk_metadata
-                chunks = valid_chunks
+            chunks = valid_chunks
 
         except Exception as e:
             print(f"Embeddings error: {e}")
@@ -744,6 +750,14 @@ async def ingest_with_smart_chunking(
 
         return {"source_id": source_id, "chunks": len(chunks), "metadata": source_meta}
 
+    except InvalidDimensionException as e:
+        print(
+            "RAG ingest error: embedding vector size does not match the existing Chroma collection "
+            f"({e}). Clear the RAG / Chroma store or use the same embedding model and dimensions "
+            "as when the collection was first created (see OPENAI_EMBEDDING_MODEL, "
+            "LITELLM_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS)."
+        )
+        return {"source_id": "error", "chunks": 0, "metadata": source_meta}
     except Exception as e:
         print(f"Smart chunking ingestion error: {e}")
         return {"source_id": "error", "chunks": 0, "metadata": source_meta}

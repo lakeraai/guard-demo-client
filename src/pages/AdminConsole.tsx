@@ -305,6 +305,9 @@ const AdminConsole: React.FC = () => {
         lakera_project_id: updates.lakera_project_id,
         use_litellm: updates.use_litellm ?? config.use_litellm,
         litellm_base_url: updates.litellm_base_url ?? config.litellm_base_url,
+        litellm_guardrail_name: updates.litellm_guardrail_name ?? config.litellm_guardrail_name,
+        litellm_guardrail_monitor_name:
+          updates.litellm_guardrail_monitor_name ?? config.litellm_guardrail_monitor_name,
       };
 
       await apiService.updateConfig(updatedConfig);
@@ -476,7 +479,7 @@ const AdminConsole: React.FC = () => {
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">1</div>
                     <div>
                       <h4 className="font-medium text-blue-900">Configure API Keys</h4>
-                      <p className="text-sm text-blue-800">Go to the <strong>Security</strong> tab and enter both your OpenAI API key and Lakera API key for content moderation. In the demo, open the prompt interace and ask something simple like "How is your day" to test the API keys.</p>
+                      <p className="text-sm text-blue-800">Go to the <strong>Security</strong> tab and enter either your OpenAI API key or LiteLLM API key (master or virtual). Add Lakera API key if you want moderation enabled. With LiteLLM + Lakera, set <strong>LiteLLM guardrail name</strong> to match your proxy config if it is not <code className="text-xs">lakera-guard</code>. In the demo, open the prompt interface and ask something simple like &quot;How is your day&quot; to test your configuration.</p>
                     </div>
                   </div>
                   
@@ -1178,7 +1181,7 @@ const AdminConsole: React.FC = () => {
                 {(config.use_litellm ?? false) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      LiteLLM virtual key
+                      LiteLLM API key (master or virtual)
                     </label>
                     <p className="text-xs text-gray-500 mb-2">
                       Optional for some proxies; used as the Bearer token when set.
@@ -1188,7 +1191,7 @@ const AdminConsole: React.FC = () => {
                         type={showLitellmVirtualKey ? "text" : "password"}
                         value={config.litellm_virtual_key || ""}
                         onChange={(e) => handleConfigUpdate({ litellm_virtual_key: e.target.value })}
-                        placeholder="sk-... or leave empty"
+                        placeholder="sk-... (master or virtual) or leave empty"
                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                       <button
@@ -1202,6 +1205,45 @@ const AdminConsole: React.FC = () => {
                           <Eye className="h-4 w-4" />
                         )}
                       </button>
+                    </div>
+                  </div>
+                )}
+                {(config.use_litellm ?? false) && config.lakera_enabled && (
+                  <div className="mb-4 space-y-3">
+                    <p className="text-xs text-gray-600">
+                      LiteLLM sets <code className="text-xs bg-gray-100 px-1 rounded">on_flagged</code> (block vs monitor) per named guardrail in <code className="text-xs bg-gray-100 px-1 rounded">config.yaml</code>, not per HTTP request. The app selects the blocking or monitoring guardrail name to match <strong>Lakera blocking</strong> below.
+                    </p>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        LiteLLM guardrail (blocking)
+                      </label>
+                      <input
+                        type="text"
+                        value={config.litellm_guardrail_name ?? ''}
+                        onChange={(e) => handleConfigUpdate({ litellm_guardrail_name: e.target.value })}
+                        placeholder="lakera-guard-block"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Used when <strong>Lakera blocking</strong> is on. Default <code className="text-xs bg-gray-100 px-1 rounded">lakera-guard-block</code> — must match <code className="text-xs bg-gray-100 px-1 rounded">guardrail_name</code> with <code className="text-xs bg-gray-100 px-1 rounded">on_flagged: block</code>.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        LiteLLM guardrail (monitor only)
+                      </label>
+                      <input
+                        type="text"
+                        value={config.litellm_guardrail_monitor_name ?? ''}
+                        onChange={(e) =>
+                          handleConfigUpdate({ litellm_guardrail_monitor_name: e.target.value })
+                        }
+                        placeholder="lakera-guard-monitor"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Used when <strong>Lakera blocking</strong> is off. Default <code className="text-xs bg-gray-100 px-1 rounded">lakera-guard-monitor</code> — match <code className="text-xs bg-gray-100 px-1 rounded">on_flagged: monitor</code> in proxy config.
+                      </p>
                     </div>
                   </div>
                 )}

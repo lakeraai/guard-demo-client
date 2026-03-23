@@ -35,6 +35,7 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 ```bash
 git clone <repository-url>
 cd guard-demo-client
+git submodule update --init --recursive
 ```
 
 ## 🚀 Quick Start (Recommended)
@@ -55,11 +56,24 @@ python start_all.py
 **The script will:**
 - Install all Python dependencies from `requirements.txt`
 - Install all Node.js dependencies from `package.json`
+- Ensure LiteLLM dependencies are reachable when configured (`litellm/config.yaml`): checks/starts Docker Postgres and LiteLLM proxy
 - Start the backend server on port 8000
 - Start the frontend server on port 3000
 - Open your browser to the demo page
 
 **Note:** You still need to create and activate the virtual environment first, but the script handles all the dependency installation and service startup for you.
+
+**Clean restart (stop LiteLLM, backend, Vite on default ports):**
+
+```bash
+./scripts/stop_demo_stack.sh              # ports 4000 / 8000 / 3000 / 3001
+./scripts/stop_demo_stack.sh --postgres   # also docker stop LiteLLM Postgres
+./scripts/fresh_start_demo.sh             # stop then run python start_all.py
+```
+
+Override the container name with `LITELLM_POSTGRES_CONTAINER` if needed (default `guard-demo-litellm-postgres`).
+
+After `git pull` or LiteLLM submodule updates, run `pip install -r requirements.txt` again so proxy extras (`fastuuid`, `orjson`, Prisma) match the submodule.
 
 ## 🛠️ Manual Setup (Alternative)
 
@@ -108,6 +122,7 @@ LiteLLM runs as a separate proxy for virtual keys and model management. Default 
 1. **One-time setup** (from project root, with venv activated). This creates `.env` from `.env.example` if needed and generates the LiteLLM Prisma client:
    ```bash
    cp .env.example .env
+   git submodule update --init --recursive
    ./scripts/setup_litellm.sh
    ```
 
@@ -118,7 +133,7 @@ LiteLLM runs as a separate proxy for virtual keys and model management. Default 
    litellm --config litellm/config.yaml
    ```
 
-4. Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and mint keys there. Master key for API: `sk-demo-master-key` (or set `LITELLM_MASTER_KEY` in `.env`).
+4. Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and mint keys there. Use either a LiteLLM **master key** or **virtual key** in Admin → Security. Lakera via LiteLLM uses two named guardrails in `litellm/config.yaml` (`on_flagged: block` vs `monitor`); Admin → Security has matching fields, and **Lakera blocking** chooses which name is sent (LiteLLM has no per-request `on_flagged` in the documented API).
 
 5. **Ollama (optional):** The config includes `ollama-llama` and `ollama-mistral`. Run [Ollama](https://ollama.ai) locally (`ollama run llama3.2`, etc.), then use these models via the LiteLLM proxy.
 
@@ -136,7 +151,7 @@ LiteLLM runs as a separate proxy for virtual keys and model management. Default 
 
 1. Navigate to the Admin Console at http://localhost:3000/admin
 2. Go to the **Security** tab
-3. Enter your OpenAI API key
+3. Enter either your OpenAI API key or LiteLLM API key (master or virtual)
 4. Optionally enter your Lakera API key and enable Lakera Guard
 5. Configure other settings as needed
 
@@ -160,6 +175,8 @@ In the **RAG** tab:
 - Upload documents (PDF, MD, TXT, CSV)
 - Generate AI-powered seed packs
 - View ingested content
+- Embeddings are batched (default 128 strings per request; override with `EMBEDDING_BATCH_SIZE`). Direct OpenAI mode uses `OPENAI_EMBEDDING_MODEL` (default `text-embedding-ada-002`). LiteLLM mode needs an embedding route; set `LITELLM_EMBEDDING_MODEL` if auto-discovery picks the wrong one.
+- **Chroma dimension mismatch**: if ingest or search silently fails, the collection may have been built with a different model (e.g. 1536 vs 3072 dims). Clear RAG / Chroma data and re-ingest, or align models. For `text-embedding-3-*` against an ada-sized index, set `EMBEDDING_DIMENSIONS=1536` (see `.env.example`).
 
 ### 5. Tool Management
 
@@ -349,7 +366,8 @@ See [CHANGELOG.md](CHANGELOG.md) for recent changes (LiteLLM integration, model 
    - Check port 3000 availability
 
 3. **API errors**
-   - Verify OpenAI API key is set
+   - Verify OpenAI key or LiteLLM key is set in Admin → Security
+   - If using LiteLLM + RAG, confirm an embedding model route is available (or set `LITELLM_EMBEDDING_MODEL`)
    - Check network connectivity
    - Review browser console for CORS issues
 
@@ -357,6 +375,11 @@ See [CHANGELOG.md](CHANGELOG.md) for recent changes (LiteLLM integration, model 
    - Delete `data/` folder to reset
    - Check file permissions
    - Verify SQLite installation
+
+5. **Lakera blocking with LiteLLM still behaves like watch**
+   - Click **Save** flow: toggle **Lakera blocking** in Admin → Security and save; watch the **backend** log on the next chat—it should print `request guardrail='lakera-guard-block'` when blocking is on and `lakera-guard-monitor` when off.
+   - Restart the proxy after changing `litellm/config.yaml`: `./scripts/stop_demo_stack.sh` then `python start_all.py` (or `./scripts/fresh_start_demo.sh`).
+   - With `store_model_in_db: true`, LiteLLM can keep **guardrail definitions from the UI/Postgres** that override or duplicate YAML. Ensure the names **`lakera-guard-block`** (block) and **`lakera-guard-monitor`** (monitor) exist and match Admin, or remove conflicting guardrails in [LiteLLM UI](http://localhost:4000/ui).
 
 ### Logs
 

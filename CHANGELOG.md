@@ -4,18 +4,23 @@
 
 ### Added
 
+- **Scripts** – `scripts/stop_demo_stack.sh` (kill ports 4000/8000/3000/3001; optional `--postgres`) and `scripts/fresh_start_demo.sh` (stop then `python start_all.py`).
 - **`litellm_virtual_key` on `AppConfig`** – LiteLLM virtual key is stored separately from `openai_api_key`; startup migration copies the old single field into `litellm_virtual_key` once for existing LiteLLM installs.
 - **LiteLLM proxy support** – Use either an OpenAI API key or a LiteLLM virtual key (Admin → Security).
 - **Unified LLM client** (`backend/llm_client.py`) – Routes chat, embeddings, and model listing to OpenAI or LiteLLM based on config.
 - **Key-specific model list** – When using LiteLLM, the model dropdown shows only models allowed for the current virtual key (fetched from `/v1/models`).
 - **Auto-pick model on save** – Saving a LiteLLM key with an invalid model (e.g. `gpt-4o-mini` when key only allows `ollama-phi3`) auto-selects the first allowed model.
 - **Auto-pick on config import** – Same logic runs when importing a config with LiteLLM or an invalid model for direct OpenAI.
-- **Admin UI** – Security tab: "Use LiteLLM proxy" toggle, separate OpenAI vs LiteLLM virtual key inputs (no cross-copy on toggle), optional LiteLLM base URL.
+- **Admin UI** – Security tab: "Use LiteLLM proxy" toggle, separate OpenAI vs LiteLLM virtual key inputs (no cross-copy on toggle), optional LiteLLM base URL, configurable **LiteLLM guardrail name** (matches proxy `guardrail_name`; default `lakera-guard`).
+- **`litellm_guardrail_name` / `litellm_guardrail_monitor_name` on `AppConfig`** – Pair of LiteLLM `guardrail_name` values (blocking vs monitor); agent picks one from `lakera_blocking_mode`. LiteLLM does not expose `on_flagged` per request; this matches Admin behavior to YAML-defined names. Default proxy entries: `lakera-guard-block`, `lakera-guard-monitor`.
+- **LiteLLM monitor + Lakera overlay** – After a successful chat in monitor mode, the app calls [`POST /v2/guard/results`](https://docs.lakera.ai/docs/api/results) (not `/v2/guard`) so the UI gets a breakdown without logging a duplicate Guard screening request.
 - **LLM tab** – Model dropdown restricted to allowed models; warning if current model is not available.
-- **`.env.example`** – Template for LiteLLM UI credentials and optional Lakera/LiteLLM overrides.
+- **`.env.example`** – Template for LiteLLM UI credentials, optional Lakera/LiteLLM overrides, and RAG embedding env vars (`OPENAI_EMBEDDING_MODEL`, `LITELLM_EMBEDDING_MODEL`, `EMBEDDING_BATCH_SIZE`, `EMBEDDING_DIMENSIONS`).
 
 ### Changed
 
+- **LiteLLM bootstrap** – Always runs `prisma generate` for the submodule (removed skip via `.bootstrap_prisma_done`) so fresh venvs don’t hit “Unable to find Prisma binaries”. Submodule runtime check now requires `fastuuid` and `orjson` imports so stale `.bootstrap_runtime_done` triggers reinstall.
+- **requirements.txt** – Added `fastuuid` and `orjson` for current LiteLLM proxy startup.
 - **Backend** – Replaced `openai_client.py` with `llm_client.py`; all AI call sites (agent, RAG, toolhive, main) use the unified client.
 - **Data model** – Added `use_litellm` and `litellm_base_url` to `AppConfig`; migration runs on startup for existing DBs.
 - **Config API** – GET/PUT and export/import include `use_litellm` and `litellm_base_url`.
@@ -27,6 +32,7 @@
 ### Fixed
 
 - **401 "key not allowed to access model"** – When using restricted LiteLLM keys, the app no longer uses an invalid model; dropdown and auto-pick ensure a valid model is always selected.
+- **RAG embeddings** – OpenAI and LiteLLM embedding calls are batched (configurable `EMBEDDING_BATCH_SIZE`), vectors are ordered by API `index`, direct mode respects `OPENAI_EMBEDDING_MODEL`, and optional `EMBEDDING_DIMENSIONS` trims `text-embedding-3-*` to match existing 1536-dim Chroma data. Ingest stores the same stripped texts that were embedded. Chroma `InvalidDimensionException` surfaces a clear log hint instead of failing silently on search.
 
 ### Dependencies
 

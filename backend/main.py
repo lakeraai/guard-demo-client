@@ -114,7 +114,52 @@ _migrate_demo_prompts_preferred_llm()
 _migrate_app_config_theme()
 _migrate_app_config_litellm_virtual_key()
 
+
+def _migrate_app_config_litellm_guardrail_name():
+    """Add litellm_guardrail_name (LiteLLM proxy guardrail_name for Lakera on chat)."""
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "litellm_guardrail_name" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN litellm_guardrail_name VARCHAR"))
+            conn.commit()
+
+
+_migrate_app_config_litellm_guardrail_name()
+
+
+def _migrate_app_config_litellm_guardrail_monitor_name():
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "litellm_guardrail_monitor_name" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN litellm_guardrail_monitor_name VARCHAR"))
+            conn.commit()
+        # Older installs used a single YAML name "lakera-guard"; repo now uses lakera-guard-block / -monitor.
+        conn.execute(
+            text(
+                "UPDATE app_config SET litellm_guardrail_name = 'lakera-guard-block' "
+                "WHERE litellm_guardrail_name = 'lakera-guard'"
+            )
+        )
+        conn.commit()
+
+
+_migrate_app_config_litellm_guardrail_monitor_name()
+
 app = FastAPI(title="Agentic Demo API", description="Backend API for the Agentic Demo application", version="1.0.0")
+
+
+def _ensure_active_model_valid(config: AppConfig, db: Session) -> None:
+    """
+    Ensure current config.openai_model is valid for active provider/key context.
+    If invalid and options are available, auto-pick the first available model.
+    """
+    valid_models = llm_client.get_models(config)
+    if valid_models and config.openai_model not in valid_models:
+        config.openai_model = valid_models[0]
+        db.commit()
+        db.refresh(config)
 
 # CORS middleware
 app.add_middleware(
@@ -177,7 +222,15 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
 # Export sections: which config fields belong to which section (for selective export/import)
 EXPORT_SECTIONS = {
     "appearance": ["business_name", "tagline", "hero_text", "hero_image_url", "logo_url", "theme"],
-    "llm": ["openai_model", "temperature", "system_prompt", "use_litellm", "litellm_base_url"],
+    "llm": [
+        "openai_model",
+        "temperature",
+        "system_prompt",
+        "use_litellm",
+        "litellm_base_url",
+        "litellm_guardrail_name",
+        "litellm_guardrail_monitor_name",
+    ],
     "security": ["lakera_enabled", "lakera_blocking_mode"],
     "rag_scanning": ["rag_content_scanning"],
     "api_keys": ["openai_api_key", "litellm_virtual_key", "lakera_api_key"],
@@ -371,6 +424,8 @@ async def import_config(file: UploadFile = File(...), db: Session = Depends(get_
                     theme=config_data.get("theme"),
                     use_litellm=config_data.get("use_litellm", False),
                     litellm_base_url=config_data.get("litellm_base_url"),
+                    litellm_guardrail_name=config_data.get("litellm_guardrail_name"),
+                    litellm_guardrail_monitor_name=config_data.get("litellm_guardrail_monitor_name"),
                 )
                 db.add(new_config)
                 db.flush()
@@ -657,6 +712,12 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             if valid_models and demo_prompt.preferred_llm in valid_models:
                 config.openai_model = demo_prompt.preferred_llm
                 db.commit()
+            elif valid_models and config.openai_model not in valid_models:
+                config.openai_model = valid_models[0]
+                db.commit()
+
+    # Final guard: if active model is invalid for current key/provider, auto-correct now.
+    _ensure_active_model_valid(config, db)
 
     # Create agent request
     agent_request = AgentRequest(message=request.message, session_id=request.session_id)

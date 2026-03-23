@@ -8,7 +8,10 @@ interface LakeraOverlayProps {
   onClose: () => void;
 }
 
-/** Map Lakera message_id to role when system prompt is first (0=system, 1=user, 2=assistant, 3=user, ...). */
+/**
+ * Map Lakera message_id to role (direct Lakera Guard indexing: 0=system, 1=user, 2=assistant, …).
+ * LiteLLM guardrail errors are normalized in the backend to match this scheme.
+ */
 function messageIdToRole(messageId: number): 'system' | 'user' | 'assistant' {
   if (messageId === 0) return 'system';
   if (messageId >= 1) return messageId % 2 === 1 ? 'user' : 'assistant';
