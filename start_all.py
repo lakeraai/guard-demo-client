@@ -22,6 +22,8 @@ def print_banner():
     print("🔧 Admin Console: http://localhost:3000/admin")
     print("📚 API Docs: http://localhost:8000/docs")
     print("🌐 Backend API: http://localhost:8000")
+    print("🧠 LiteLLM API: http://localhost:4000")
+    print("🛡️ LiteLLM UI: http://localhost:4000/ui")
     print("=" * 60)
     print()
 

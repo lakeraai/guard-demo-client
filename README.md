@@ -25,6 +25,7 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 
 - Python 3.8–3.12 (3.13+ may break some deps like pandas; use `pyenv` or Homebrew `python@3.12` if needed)
 - Node.js 16+
+- Docker (required for LiteLLM + Postgres auto-bootstrap)
 - **OpenAI API key** or **LiteLLM virtual key** (either works; use Admin → Security to configure)
 - Lakera API key (optional)
 
@@ -55,9 +56,10 @@ python start_all.py
 **The script will:**
 - Install all Python dependencies from `requirements.txt`
 - Install all Node.js dependencies from `package.json`
+- Auto-start Postgres for LiteLLM (Docker)
+- Auto-start LiteLLM proxy container on port 4000 using `litellm/config.yaml`
 - Start the backend server on port 8000
 - Start the frontend server on port 3000
-- Open your browser to the demo page
 
 **Note:** You still need to create and activate the virtual environment first, but the script handles all the dependency installation and service startup for you.
 
@@ -89,7 +91,7 @@ npm install
 npm run dev
 ```
 
-### Running Both Services
+### Running Both Services Manually
 
 **Terminal 1 - Backend:**
 ```bash
@@ -101,26 +103,51 @@ python start_backend.py
 npm run dev
 ```
 
-**Terminal 3 - LiteLLM (optional):**
+LiteLLM runs in Docker and is automatically managed by `start_all.py`.
 
-LiteLLM runs as a separate proxy for virtual keys and model management. Default config uses `postgresql://litellm:litellm@localhost:5433/litellm` and UI login `admin` / `demo` (from `.env`).
+### LiteLLM Setup (Dockerized)
 
-1. **One-time setup** (from project root, with venv activated). This creates `.env` from `.env.example` if needed and generates the LiteLLM Prisma client:
+LiteLLM uses `litellm/litellm-database:v1.82.3` (default) and PostgreSQL on `localhost:5432`.
+
+1. Ensure `.env` exists:
    ```bash
    cp .env.example .env
-   ./scripts/setup_litellm.sh
    ```
-
-2. **If your Postgres or UI credentials differ:** edit `litellm/config.yaml` (e.g. `general_settings.database_url`) and `.env` (`UI_USERNAME`, `UI_PASSWORD`).
-
-3. **Start the LiteLLM proxy** in Terminal 3:
+2. If needed, edit:
+   - `litellm/config.yaml` (`general_settings.database_url`, model routes, guardrails)
+   - `.env` (`AZURE_API_KEY`, `UI_USERNAME`, `UI_PASSWORD`, optional `LAKERA_*`)
+3. Start the stack:
    ```bash
-   litellm --config litellm/config.yaml
+   source venv/bin/activate
+   python start_all.py
    ```
+4. Open **http://localhost:4000/ui** and sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`.
 
-4. Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and mint keys there. Master key for API: `sk-demo-master-key` (or set `LITELLM_MASTER_KEY` in `.env`).
+Useful scripts:
 
-5. **Ollama (optional):** The config includes `ollama-llama` and `ollama-mistral`. Run [Ollama](https://ollama.ai) locally (`ollama run llama3.2`, etc.), then use these models via the LiteLLM proxy.
+```bash
+./scripts/stop_demo_stack.sh                 # stop backend/frontend and LiteLLM container
+./scripts/stop_demo_stack.sh --postgres      # also stop LiteLLM Postgres container
+./scripts/fresh_start_demo.sh                # stop + activate venv + start_all.py
+```
+
+### Windows Notes
+
+- Use PowerShell activation commands:
+  ```powershell
+  python -m venv venv
+  .\venv\Scripts\Activate.ps1
+  python start_all.py
+  ```
+- In `cmd.exe`, use:
+  ```bat
+  venv\Scripts\activate.bat
+  ```
+- Keep Docker Desktop running (Linux containers enabled).
+- If LiteLLM image startup fails on your architecture, set `.env`:
+  - `LITELLM_DOCKER_PLATFORM=linux/amd64` (current default)
+  - or clear it / set `linux/arm64` if your machine supports that image tag.
+- If Docker reports a config mount error on Windows path handling, run from PowerShell in the repo root and retry `python start_all.py` (the bootstrap mounts `data/litellm-runtime-config.yaml` into the container).
 
 ## 🌐 Access Points
 
@@ -362,6 +389,7 @@ See [CHANGELOG.md](CHANGELOG.md) for recent changes (LiteLLM integration, model 
 
 - Backend logs: Check terminal running `start_backend.py`
 - Frontend logs: Check browser console
+- LiteLLM container logs: `docker logs -f guard-demo-litellm-proxy`
 - API logs: Check backend terminal output
 
 ## 🤝 Contributing
