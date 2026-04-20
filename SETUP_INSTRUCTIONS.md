@@ -10,7 +10,7 @@ Step-by-step from the README. Do these in order.
 - **Node.js 16+** – `node --version`
 - **OpenAI API key** – from https://platform.openai.com
 - **Lakera API key** (optional) – for content moderation
-- **PostgreSQL** (only if you use LiteLLM) – default config expects `localhost:5433`
+- **Docker** (recommended) – `start_all.py` auto-manages LiteLLM and Postgres containers
 
 ---
 
@@ -39,7 +39,7 @@ Step-by-step from the README. Do these in order.
 
 4. **Configure the app**
    - Open **http://localhost:3000/admin**
-   - **Security** tab: add your **OpenAI API key** or **LiteLLM virtual key** (required); optionally Lakera API key
+   - **Security** tab: add your **OpenAI API key** or **LiteLLM API key (master or virtual)**; optionally Lakera API key
    - Use other tabs for branding, LLM, RAG, tools, demo prompts
 
 ---
@@ -68,24 +68,27 @@ Then open http://localhost:3000 and http://localhost:3000/admin and add your Ope
 
 ---
 
-## Using LiteLLM virtual key
+## Using LiteLLM API key (master or virtual)
 
 If you use the LiteLLM proxy instead of direct OpenAI:
 
 1. Start the LiteLLM proxy (see "Optional: LiteLLM proxy" below).
 2. In **Admin → Security**, enable **Use LiteLLM proxy**.
-3. Paste your **LiteLLM virtual key** (from http://localhost:4000/ui) into the API key field.
+3. Paste your **LiteLLM API key** (master or virtual, from http://localhost:4000/ui) into the API key field.
 4. Optionally set **LiteLLM base URL** if your proxy runs elsewhere (default: `http://localhost:4000`).
-5. **Model selection**: The app fetches models allowed for your key from the proxy. The LLM tab dropdown shows only valid models. If you save a key with an invalid model selected, the app auto-picks the first allowed model.
+5. If Lakera is enabled in LiteLLM mode, set guardrail names in Admin → Security to match `litellm/config.yaml`:
+   - `LiteLLM guardrail name (blocking)` → `lakera-guard-block`
+   - `LiteLLM guardrail name (monitor)` → `lakera-guard-monitor`
+6. **Model selection**: The app fetches models allowed for your key from the proxy. The LLM tab dropdown shows only valid models. If you save a key with an invalid model selected, the app auto-picks the first allowed model.
 
 ---
 
 ## Optional: LiteLLM proxy (Terminal 3)
 
-Only if you want the LiteLLM proxy for virtual keys and model management.
+Use this only if you are not using `start_all.py` auto-bootstrap.
 
 1. **PostgreSQL**  
-   Default config uses: `postgresql://litellm:litellm@localhost:5433/litellm`.  
+   Default config uses: `postgresql://litellm:litellm@localhost:5432/litellm`.  
    Create that DB and user, or change the URL in `litellm/config.yaml`.
 
 2. **One-time setup** (from project root, with venv activated)
@@ -106,12 +109,11 @@ Only if you want the LiteLLM proxy for virtual keys and model management.
    Open **http://localhost:4000/ui**, sign in with `UI_USERNAME` / `UI_PASSWORD` from `.env`. Add models and create keys. API master key: `sk-demo-master-key` (or set `LITELLM_MASTER_KEY` in `.env`).
 
 5. **Lakera Guard (optional)**  
-   To enable content moderation (prompt injection, PII, etc.) on proxy requests, add your Lakera API key to `.env`:
+   To enable content moderation on proxy requests, add your Lakera API key to `.env`:
    ```bash
    export LAKERA_API_KEY=your-lakera-api-key
    ```
-   Then `source .env` before starting LiteLLM. The guardrail runs on every request (`default_on: true`). Get a key at [platform.lakera.ai](https://platform.lakera.ai).  
-   Note: Lakera v2 is documented for `/v1/chat/completions`; Claude Code uses `/v1/messages`—guardrail support may vary.
+   Then `source .env` before starting LiteLLM. In this repo, guardrails are named `lakera-guard-block` and `lakera-guard-monitor` in `litellm/config.yaml`, and the app selects one based on Lakera blocking mode.
 
 ---
 
@@ -132,5 +134,5 @@ Only if you want the LiteLLM proxy for virtual keys and model management.
 
 - **Backend won't start** – Python 3.8+, port 8000 free, `pip install -r requirements.txt`.
 - **Frontend won't start** – Node 16+, port 3000 free, `npm install`.
-- **API errors** – Set OpenAI API key in Admin → Security.
+- **API errors** – Set OpenAI API key or LiteLLM API key in Admin → Security.
 - **DB issues** – Remove `data/` to reset SQLite.

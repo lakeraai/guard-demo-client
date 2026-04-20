@@ -27,6 +27,9 @@ class AppConfig(Base):
     litellm_base_url = Column(String, nullable=True)
     # LiteLLM proxy virtual key (when use_litellm); separate from direct OpenAI key
     litellm_virtual_key = Column(String, nullable=True)
+    # Guardrail names selected by app when using LiteLLM-native Lakera guardrails.
+    litellm_guardrail_name = Column(String, nullable=True)
+    litellm_guardrail_monitor_name = Column(String, nullable=True)
     rag_content_scanning = Column(Boolean, default=False)
     rag_lakera_project_id = Column(String, nullable=True)
     # UI theming

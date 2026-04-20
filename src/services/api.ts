@@ -18,6 +18,18 @@ import {
 const API_BASE = '/api';
 
 class ApiService {
+  private async parseError(response: Response, fallback: string): Promise<never> {
+    let detail = fallback;
+    try {
+      const raw = await response.text();
+      const payload = raw ? JSON.parse(raw) : {};
+      detail = payload?.detail || payload?.message || fallback;
+    } catch {
+      // keep fallback
+    }
+    throw new Error(String(detail));
+  }
+
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE}${endpoint}`, {
       headers: {
@@ -27,9 +39,7 @@ class ApiService {
       ...options,
     });
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
-    }
+    if (!response.ok) return this.parseError(response, `API request failed: ${response.statusText}`);
 
     return response.json();
   }
@@ -70,7 +80,7 @@ class ApiService {
     });
 
     if (!response.ok) {
-      throw new Error('Import failed');
+      return this.parseError(response, 'Import failed');
     }
 
     return response.json();
@@ -85,7 +95,7 @@ class ApiService {
   }
 
   // RAG endpoints
-  async uploadFile(file: File): Promise<{ message: string }> {
+  async uploadFile(file: File): Promise<{ message: string; filename?: string; result?: { chunks?: number; blocked_chunks?: number } }> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -95,7 +105,7 @@ class ApiService {
     });
 
     if (!response.ok) {
-      throw new Error('File upload failed');
+      return this.parseError(response, 'File upload failed');
     }
 
     return response.json();

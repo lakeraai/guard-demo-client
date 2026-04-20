@@ -26,7 +26,7 @@ A sophisticated B2B sales demo platform featuring AI-powered chatbot, Lakera Gua
 - Python 3.8–3.12 (3.13+ may break some deps like pandas; use `pyenv` or Homebrew `python@3.12` if needed)
 - Node.js 16+
 - Docker (required for LiteLLM + Postgres auto-bootstrap)
-- **OpenAI API key** or **LiteLLM virtual key** (either works; use Admin → Security to configure)
+- **OpenAI API key** or **LiteLLM API key** (master or virtual; configure in Admin → Security)
 - Lakera API key (optional)
 
 ## 🛠️ Installation
@@ -167,6 +167,9 @@ Useful scripts:
 2. Go to the **Security** tab
 3. Enter your OpenAI API key
 4. Optionally enter your Lakera API key and enable Lakera Guard
+5. If using LiteLLM + Lakera guardrails, set guardrail names in Admin → Security to match `litellm/config.yaml`:
+   - blocking: `lakera-guard-block`
+   - monitor: `lakera-guard-monitor`
 5. Configure other settings as needed
 
 ### 2. Branding Customization
@@ -298,8 +301,9 @@ guard-demo-client/
 
 ### Lakera Integration
 - Content moderation with blocking/watching modes
+- Direct Lakera API checks or LiteLLM-native Lakera guardrails (when LiteLLM mode is enabled)
 - Guardrail enforcement (blocking mode) or monitoring (watching mode)
-- Real-time status monitoring
+- Unified Lakera result shape for the frontend overlay in either provider mode
 - Detailed violation reporting with TL;DR summaries
 
 ### RAG Capabilities

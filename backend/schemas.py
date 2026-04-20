@@ -15,6 +15,8 @@ class AppConfigBase(BaseModel):
     lakera_blocking_mode: bool = False
     use_litellm: bool = False
     litellm_base_url: Optional[str] = None
+    litellm_guardrail_name: Optional[str] = None
+    litellm_guardrail_monitor_name: Optional[str] = None
     rag_content_scanning: bool = False
     rag_lakera_project_id: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
