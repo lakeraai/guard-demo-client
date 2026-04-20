@@ -2,6 +2,8 @@
 Unified LLM client that routes to OpenAI or LiteLLM proxy based on config.
 Exposes chat_completion, get_embeddings, get_models with same signatures as openai_client.
 """
+import ast
+import copy
 import openai
 import httpx
 from typing import List, Dict, Any, Optional, Union
@@ -25,6 +27,77 @@ STATIC_MODELS = [
     "ollama-llama",
     "ollama-mistral",
 ]
+
+
+def _supports_custom_temperature(model: str) -> bool:
+    """
+    GPT-5 family currently rejects non-default temperature values on chat completions.
+    """
+    name = (model or "").strip().lower()
+    return not name.startswith("gpt-5")
+
+
+class LiteLLMGuardrailError(Exception):
+    """Raised when LiteLLM guardrails block a response and return detector details."""
+
+    def __init__(self, message: str, lakera_status: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.lakera_status = lakera_status or {}
+
+
+def _normalize_litellm_lakera_message_ids(status: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    LiteLLM Lakera payloads can be offset by +1 vs direct Lakera indexing expected by UI.
+    Shift message_id >= 1 down by one.
+    """
+    out = copy.deepcopy(status)
+
+    def shift_entry(entry: Any) -> None:
+        if not isinstance(entry, dict):
+            return
+        mid = entry.get("message_id")
+        if isinstance(mid, int) and mid >= 1:
+            entry["message_id"] = mid - 1
+
+    for item in out.get("breakdown") or []:
+        shift_entry(item)
+    for item in out.get("payload") or []:
+        shift_entry(item)
+    return out
+
+
+def _extract_litellm_guardrail_status(e: openai.APIStatusError) -> Optional[Dict[str, Any]]:
+    """
+    Parse LiteLLM 400 guardrail error payload into a Lakera-shaped status object.
+    """
+    try:
+        payload = e.response.json() if e.response is not None else {}
+    except Exception:
+        payload = {}
+
+    error_obj = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error_obj, dict):
+        return None
+
+    # Preferred shape
+    direct = error_obj.get("lakera_guard_response")
+    if isinstance(direct, dict):
+        return _normalize_litellm_lakera_message_ids(direct)
+
+    # Some LiteLLM errors embed a Python-dict-like string in error.message
+    raw_message = error_obj.get("message")
+    if not isinstance(raw_message, str) or not raw_message.strip():
+        return None
+    try:
+        parsed_obj = ast.literal_eval(raw_message.strip())
+    except Exception:
+        return None
+    if not isinstance(parsed_obj, dict):
+        return None
+    nested = parsed_obj.get("lakera_guardrail_response")
+    if isinstance(nested, dict):
+        return _normalize_litellm_lakera_message_ids(nested)
+    return None
 
 
 def effective_llm_api_key(cfg: Optional[AppConfig]) -> Optional[str]:
@@ -66,10 +139,11 @@ def _call_openai_chat(
 ) -> Dict[str, Any]:
     """Call OpenAI API directly for chat completion"""
     client = openai.OpenAI(api_key=api_key)
+    effective_temperature = temperature if _supports_custom_temperature(model) else None
     params = {
         "model": model,
         "messages": messages,
-        "temperature": temperature,
+        "temperature": effective_temperature,
         "tools": tools,
         "tool_choice": "auto" if tools else None,
     }
@@ -85,15 +159,25 @@ def _call_litellm_chat(
     api_key: str,
     base_url: str,
     tools: Optional[List[Dict[str, Any]]] = None,
+    litellm_guardrail_name: Optional[str] = None,
+    litellm_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Call LiteLLM proxy for chat completion (OpenAI-compatible API)"""
     client = openai.OpenAI(api_key=api_key, base_url=f"{base_url.rstrip('/')}/v1")
+    effective_temperature = temperature if _supports_custom_temperature(model) else None
+    extra_body: Dict[str, Any] = {}
+    if litellm_guardrail_name:
+        # LiteLLM expects guardrails as a list; singular guardrail_name can be forwarded upstream.
+        extra_body["guardrails"] = [litellm_guardrail_name]
+    if litellm_metadata:
+        extra_body["metadata"] = litellm_metadata
     params = {
         "model": model,
         "messages": messages,
-        "temperature": temperature,
+        "temperature": effective_temperature,
         "tools": tools,
         "tool_choice": "auto" if tools else None,
+        "extra_body": extra_body if extra_body else None,
     }
     params = {k: v for k, v in params.items() if v is not None}
     response = client.chat.completions.create(**params)
@@ -128,6 +212,8 @@ def chat_completion(
     temperature: Union[float, str, int, None] = 0.7,
     tools: Optional[List[Dict[str, Any]]] = None,
     config: Optional[AppConfig] = None,
+    litellm_guardrail_name: Optional[str] = None,
+    litellm_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Send chat completion request. Routes to OpenAI or LiteLLM based on config.
@@ -162,6 +248,8 @@ def chat_completion(
                 api_key=api_key,
                 base_url=litellm_base_url,
                 tools=tools,
+                litellm_guardrail_name=litellm_guardrail_name,
+                litellm_metadata=litellm_metadata,
             )
         else:
             return _call_openai_chat(
@@ -178,6 +266,10 @@ def chat_completion(
             ) from e
         raise
     except openai.APIStatusError as e:
+        if use_litellm and getattr(e, "status_code", None) == 400:
+            lakera_status = _extract_litellm_guardrail_status(e)
+            if lakera_status:
+                raise LiteLLMGuardrailError("LiteLLM guardrail blocked this response.", lakera_status) from e
         raise Exception(f"LLM API error: {e}") from e
 
 

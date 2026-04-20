@@ -11,6 +11,8 @@ export interface AppConfig {
   lakera_blocking_mode: boolean;
   use_litellm?: boolean;
   litellm_base_url?: string;
+  litellm_guardrail_name?: string | null;
+  litellm_guardrail_monitor_name?: string | null;
   rag_content_scanning: boolean;
   rag_lakera_project_id?: string;
   lakera_project_id?: string;
@@ -35,6 +37,8 @@ export interface AppConfigUpdate {
   lakera_blocking_mode: boolean;
   use_litellm?: boolean;
   litellm_base_url?: string;
+  litellm_guardrail_name?: string | null;
+  litellm_guardrail_monitor_name?: string | null;
   rag_content_scanning: boolean;
   rag_lakera_project_id?: string;
   openai_model: string;

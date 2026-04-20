@@ -27,8 +27,25 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
     lakera_api_key = cfg.lakera_api_key if cfg.lakera_enabled else None
     lakera_project_id = cfg.lakera_project_id if cfg.lakera_enabled else None
     lakera_blocking_mode = cfg.lakera_blocking_mode if cfg.lakera_enabled else False
+    use_litellm_guardrails = bool(getattr(cfg, "use_litellm", False) and cfg.lakera_enabled and cfg.lakera_api_key)
+    litellm_guardrail_block = (
+        (getattr(cfg, "litellm_guardrail_name", None) or "").strip() or "lakera-guard-block"
+    )
+    litellm_guardrail_monitor = (
+        (getattr(cfg, "litellm_guardrail_monitor_name", None) or "").strip() or "lakera-guard-monitor"
+    )
+    litellm_guardrail = litellm_guardrail_block if lakera_blocking_mode else litellm_guardrail_monitor
+    litellm_guardrail_metadata = (
+        {
+            "session_id": req.session_id or "",
+            "guardrail_name": litellm_guardrail,
+            "source": "agentic-demo-chat",
+        }
+        if use_litellm_guardrails
+        else None
+    )
 
-    if cfg.lakera_enabled and lakera_api_key:
+    if cfg.lakera_enabled and lakera_api_key and not use_litellm_guardrails:
         print("🛡️ Checking user input with Lakera...")
         # Prepare messages for Lakera (user only for pre-check, no system prompt)
         lakera_messages = []
@@ -92,6 +109,8 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
             temperature=cfg.temperature,
             tools=tools_manifest if tools_manifest else None,
             config=cfg,
+            litellm_guardrail_name=litellm_guardrail if use_litellm_guardrails else None,
+            litellm_metadata=litellm_guardrail_metadata,
         )
 
         # Extract the response
@@ -166,6 +185,8 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
                 model=cfg.openai_model,
                 temperature=cfg.temperature,
                 config=cfg,
+                litellm_guardrail_name=litellm_guardrail if use_litellm_guardrails else None,
+                litellm_metadata=litellm_guardrail_metadata,
             )
 
             # Get final response
@@ -177,7 +198,7 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
 
         # Step 5: Check assistant response with Lakera if enabled (post-response check)
         lakera_status = None
-        if cfg.lakera_enabled and cfg.lakera_api_key:
+        if cfg.lakera_enabled and cfg.lakera_api_key and not use_litellm_guardrails:
             print("🛡️ Checking assistant response with Lakera...")
             # Prepare messages for Lakera (user + assistant only, no system prompt)
             lakera_messages = []
@@ -201,11 +222,48 @@ async def run_agent(req: AgentRequest, cfg: AppConfig, db: Session) -> AgentResu
                     print("📝 Assistant response flagged but allowed through (blocking mode disabled)")
             else:
                 print("✅ Assistant response passed Lakera moderation")
+        elif (
+            cfg.lakera_enabled
+            and cfg.lakera_api_key
+            and use_litellm_guardrails
+            and not lakera_blocking_mode
+        ):
+            # In monitor mode with LiteLLM guardrails, pull detector confidence data for the UI panel.
+            lakera_status = await lakera.get_guard_results_for_ui(
+                messages=[
+                    {"role": "user", "content": req.message},
+                    {"role": "assistant", "content": response_text or ""},
+                ],
+                meta={"session_id": req.session_id} if req.session_id else None,
+                api_key=cfg.lakera_api_key,
+                project_id=cfg.lakera_project_id,
+                system_prompt=cfg.system_prompt,
+            )
+        elif cfg.lakera_enabled and cfg.lakera_api_key and use_litellm_guardrails:
+            # LiteLLM blocking mode only returns Lakera details when content is blocked.
+            # For successful turns, clear any stale previous red state in the UI.
+            lakera_status = {"flagged": False, "breakdown": [], "payload": [], "metadata": {"source": "litellm"}}
+            lakera.set_last_result(lakera_status)
+
+        if cfg.lakera_enabled and cfg.lakera_api_key and use_litellm_guardrails and lakera_status is None:
+            # Fallback clear for monitor mode when /guard/results is unavailable.
+            lakera_status = {"flagged": False, "breakdown": [], "payload": [], "metadata": {"source": "litellm"}}
+            lakera.set_last_result(lakera_status)
 
         return AgentResult(
             response=response_text, citations=citations, tool_traces=tool_traces, lakera_status=lakera_status
         )
 
+    except llm_client.LiteLLMGuardrailError as e:
+        lakera_status = e.lakera_status if isinstance(e.lakera_status, dict) else None
+        if lakera_status:
+            lakera.set_last_result(lakera_status)
+        return AgentResult(
+            response="This content has been moderated by Lakera and found to be in breach of our security policies. Please contact support if you believe this is an error.",
+            citations=citations,
+            tool_traces=tool_traces if "tool_traces" in locals() else [],
+            lakera_status=lakera_status,
+        )
     except Exception as e:
         return AgentResult(
             response=f"I apologize, but I encountered an error: {str(e)}",

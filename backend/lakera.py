@@ -3,6 +3,10 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 LAKERA_URL = "https://api.lakera.ai/v2/guard"
+LAKERA_RESULTS_URL = "https://api.lakera.ai/v2/guard/results"
+
+# /guard/results returns confidence levels; treat these as detector hits for UI surfacing.
+_RESULTS_DETECTED_LEVELS = frozenset({"l1_confident", "l2_very_likely", "l3_likely"})
 
 # Global variables to store the last Lakera result and last request payload for debugging
 _last_lakera_result: Optional[Dict[str, Any]] = None
@@ -76,11 +80,106 @@ async def check_interaction(
         return None
 
 
+def _normalize_results_level(raw: Optional[str]) -> str:
+    if not raw or not isinstance(raw, str):
+        return ""
+    return raw.strip().lower()
+
+
+def _guard_results_to_overlay_shape(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Map POST /v2/guard/results output into the same top-level Lakera shape
+    used by the UI overlay (`flagged`, `breakdown`, `payload`).
+    """
+    rows = raw.get("results")
+    if not isinstance(rows, list):
+        rows = []
+    breakdown: List[Dict[str, Any]] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        level = _normalize_results_level(item.get("result"))
+        detected = level in _RESULTS_DETECTED_LEVELS or bool(item.get("custom_matched"))
+        breakdown.append(
+            {
+                "project_id": item.get("project_id"),
+                "policy_id": item.get("policy_id"),
+                "detector_id": item.get("detector_id"),
+                "detector_type": item.get("detector_type"),
+                "detected": detected,
+                "message_id": item.get("message_id"),
+                "confidence_level": item.get("result"),
+            }
+        )
+    flagged = any(b.get("detected") for b in breakdown)
+    return {
+        "flagged": flagged,
+        "breakdown": breakdown,
+        "payload": [],
+        "metadata": {
+            "source": "lakera_guard_results",
+            "note": "From POST /v2/guard/results for UI normalization.",
+        },
+        "dev_info": raw.get("dev_info"),
+    }
+
+
+async def get_guard_results_for_ui(
+    messages: List[Dict[str, str]],
+    meta: Optional[Dict[str, Any]] = None,
+    api_key: Optional[str] = None,
+    project_id: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Call POST /v2/guard/results and normalize output for existing frontend Lakera UI.
+    """
+    global _last_lakera_result
+    if not api_key:
+        return None
+
+    msgs = list(messages) if messages else []
+    if system_prompt and not any(m.get("role") == "system" for m in msgs):
+        msgs.insert(0, {"role": "system", "content": system_prompt})
+
+    payload: Dict[str, Any] = {"messages": msgs, "metadata": meta or {}, "dev_info": True}
+    if project_id:
+        payload["project_id"] = project_id
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    try:
+        global _last_lakera_request
+        _last_lakera_request = {
+            "endpoint": "guard/results",
+            "messages": msgs,
+            "project_id": project_id,
+            "system_prompt_included": any(m.get("role") == "system" for m in msgs),
+        }
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(LAKERA_RESULTS_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            raw = response.json()
+            if not isinstance(raw, dict):
+                return None
+            shaped = _guard_results_to_overlay_shape(raw)
+            _last_lakera_result = shaped
+            return shaped
+    except Exception as e:
+        print(f"Lakera /guard/results API error: {e}")
+        return None
+
+
 def get_last_result() -> Optional[Dict[str, Any]]:
     """
     Get the last Lakera result for frontend polling
     """
     return _last_lakera_result
+
+
+def set_last_result(result: Optional[Dict[str, Any]]) -> None:
+    """Store a Lakera-shaped moderation result for frontend polling."""
+    global _last_lakera_result
+    _last_lakera_result = result
 
 
 def get_last_request() -> Optional[Dict[str, Any]]:
