@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# agent-check — drift + integrity for .agent/ memory.
+# Backend-aware: MODE=cli (git) else standalone (tree-hash). Cheap version; harden later.
+# Drift = covered code changed since a note's `synced` baseline. Run before a PR.
+# Shell gotcha: status flag set in a `for` loop (NOT `| while` subshell — won't propagate).
+set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" || exit 2
+AGENT_DIR=".agent"
+
+# --- backend detection ---
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  MODE="cli"
+else
+  MODE="standalone"
+fi
+echo "agent-check: MODE=$MODE  root=$ROOT"
+
+# tree-hash of a path's full recursive file set (sorted) — standalone baseline.
+tree_hash() {
+  # $1 = path (file or dir). Hash content of all files under it, sorted.
+  if [ -f "$1" ]; then
+    sha256sum "$1" 2>/dev/null | awk '{print $1}'
+  elif [ -d "$1" ]; then
+    find "$1" -type f 2>/dev/null | LC_ALL=C sort | xargs -r sha256sum 2>/dev/null \
+      | sha256sum | awk '{print $1}'
+  else
+    echo "MISSING"
+  fi
+}
+
+DRIFT=0
+NOTES=0
+
+# Iterate code-tied notes. Drift-check modules/ only (policy notes excluded — see conventions.md).
+for note in $(find "$AGENT_DIR/modules" -name '*.md' 2>/dev/null | LC_ALL=C sort); do
+  covers_line="$(grep -m1 '^covers:' "$note" 2>/dev/null || true)"
+  synced="$(grep -m1 '^synced:' "$note" 2>/dev/null | sed 's/^synced:[[:space:]]*//' | tr -d ' ')"
+  [ -z "$covers_line" ] && continue
+  [ -z "$synced" ] && continue
+  NOTES=$((NOTES+1))
+
+  # parse covers: [a, b, c]  → space-separated paths (strip inline # comment + brackets)
+  covers="$(echo "$covers_line" | sed 's/#.*//; s/^covers:[[:space:]]*//; s/\[//; s/\]//; s/,/ /g')"
+
+  for path in $covers; do
+    [ -z "$path" ] && continue
+    if [ ! -e "$path" ]; then
+      echo "  DRIFT  $note → covers missing path: $path"
+      DRIFT=$((DRIFT+1)); continue
+    fi
+    if [ "$MODE" = "cli" ]; then
+      if ! git cat-file -e "$synced" 2>/dev/null; then
+        echo "  WARN   $note → synced '$synced' not a known commit (rebased?); re-stamp on next /capture"
+        continue
+      fi
+      changed="$(git log --oneline "$synced"..HEAD -- "$path" 2>/dev/null)"
+      if [ -n "$changed" ]; then
+        n="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
+        echo "  DRIFT  $note → $path changed in $n commit(s) since $synced:"
+        printf '%s\n' "$changed" | sed 's/^/           /'
+        DRIFT=$((DRIFT+1))
+      fi
+    else
+      cur="$(tree_hash "$path")"
+      if [ "$cur" != "$synced" ]; then
+        echo "  DRIFT  $note → $path tree-hash $cur != synced $synced"
+        DRIFT=$((DRIFT+1))
+      fi
+    fi
+  done
+done
+
+# --- plan integrity (only if a plan exists) ---
+if [ -f "$AGENT_DIR/plan.md" ]; then
+  echo "agent-check: plan.md present — verify task ids ↔ tasks/*.md, doing-without-owner, blocked cycles (manual for now)"
+fi
+
+echo "agent-check: $NOTES code-tied note(s), $DRIFT drift finding(s)"
+echo "reminder: review .agent/gaps.md (known-risky/unverified code) — distinct from drift."
+[ "$DRIFT" -eq 0 ] || exit 1
