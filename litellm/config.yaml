@@ -139,7 +139,7 @@ guardrails:
     litellm_params:
       guardrail: lakera_v2
       default_on: false
-      mode: "post_call"
+      mode: ["pre_call", "post_call"]
       on_flagged: "block"
       api_key: os.environ/LAKERA_API_KEY
       api_base: os.environ/LAKERA_API_BASE
@@ -148,8 +148,9 @@ guardrails:
     litellm_params:
       guardrail: lakera_v2
       default_on: false
-      mode: "post_call"
+      mode: ["pre_call", "post_call"]
       on_flagged: "monitor"
       api_key: os.environ/LAKERA_API_KEY
       api_base: os.environ/LAKERA_API_BASE
       project_id: os.environ/LAKERA_PROJECT_ID
+
