@@ -20,6 +20,7 @@ class AppConfigBase(BaseModel):
     rag_content_scanning: bool = False
     rag_lakera_project_id: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
+    embeddings_model: Optional[str] = None
     temperature: int = 7
     system_prompt: Optional[str] = None
     # UI theme: e.g. "blue", "emerald", "purple", "amber"

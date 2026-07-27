@@ -8,6 +8,7 @@ import ToolManager from '../components/ToolManager';
 import GenerateContentModal from '../components/GenerateContentModal';
 import RagManagement, { RagManagementRef } from '../components/RagManagement';
 import DemoPromptManager from '../components/DemoPromptManager';
+import packageJson from '../../package.json';
 
 type TabType = 'setup' | 'branding' | 'llm' | 'rag' | 'rag-scanning' | 'tools' | 'security' | 'prompts' | 'export';
 
@@ -24,6 +25,8 @@ const AdminConsole: React.FC = () => {
   const [showLakeraKey, setShowLakeraKey] = useState(false);
   const [showMCPInstructions, setShowMCPInstructions] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableEmbeddingModels, setAvailableEmbeddingModels] = useState<string[]>([]);
+  const [embeddingModelsLoaded, setEmbeddingModelsLoaded] = useState(false);
   const [ragScanningNotificationCount, setRagScanningNotificationCount] = useState<number>(0);
   const [ragScanningProgress, setRagScanningProgress] = useState<{isScanning: boolean; current: number; total: number; filename?: string} | null>(null);
   const progressPollingRef = useRef<number | null>(null);
@@ -46,6 +49,7 @@ const AdminConsole: React.FC = () => {
   useEffect(() => {
     loadConfig();
     loadModels();
+    loadEmbeddingModels();
     loadRagScanningResult();
   }, []);
  
@@ -54,6 +58,17 @@ const AdminConsole: React.FC = () => {
       applyTheme(config.theme);
     }
   }, [config?.theme]);
+
+  useEffect(() => {
+    if (
+      config &&
+      embeddingModelsLoaded &&
+      availableEmbeddingModels.length > 0 &&
+      !availableEmbeddingModels.includes(config.embeddings_model || '')
+    ) {
+      setConfig({ ...config, embeddings_model: availableEmbeddingModels[0] });
+    }
+  }, [config, embeddingModelsLoaded, availableEmbeddingModels]);
 
   const applyTheme = (theme?: string) => {
     const themes = ['blue', 'emerald', 'purple', 'amber'];
@@ -73,9 +88,13 @@ const AdminConsole: React.FC = () => {
   // Reload models when switching to LLM tab (e.g. after saving LiteLLM key in Security)
   useEffect(() => {
     if (activeTab === 'llm') {
+      loadConfig(); // Reload config to get latest saved model
       loadModels();
+      if (!embeddingModelsLoaded) {
+        loadEmbeddingModels();
+      }
     }
-  }, [activeTab]);
+  }, [activeTab, embeddingModelsLoaded]);
 
   // Poll for RAG scanning progress
   useEffect(() => {
@@ -222,20 +241,49 @@ const AdminConsole: React.FC = () => {
   const loadModels = async () => {
     try {
       const modelsData = await apiService.getModels();
-      setAvailableModels(modelsData.models);
+      const models = modelsData.models;
+      setAvailableModels(models);
+      
+      // If current model is not available, suggest switching
+      if (config && config.openai_model && !models.includes(config.openai_model)) {
+        console.warn(`Current model '${config.openai_model}' not available. Available models:`, models);
+      }
     } catch (error) {
       console.error('Failed to load models:', error);
-      // Fallback to hardcoded models if API fails
+      // Fallback to common models that are usually available (remove gpt-5 which often isn't)
       setAvailableModels([
-        "gpt-5",
-        "gpt-5-mini", 
-        "gpt-5-nano",
         "gpt-4o",
         "gpt-4o-mini",
         "gpt-4",
         "gpt-4-turbo",
-        "gpt-3.5-turbo"
+        "gpt-3.5-turbo",
+        "llama3.2",
+        "llama2"
       ]);
+    }
+  };
+
+  const loadEmbeddingModels = async (force = false) => {
+    if (!force && embeddingModelsLoaded) {
+      return;
+    }
+    setEmbeddingModelsLoaded(false);
+    try {
+      const modelsData = await apiService.getEmbeddingModels();
+      const models = modelsData.models;
+      setAvailableEmbeddingModels(models);
+      setEmbeddingModelsLoaded(true);
+      console.log('Loaded embedding models:', models);
+    } catch (error) {
+      console.error('Failed to load embedding models:', error);
+      // Fallback to common embedding models including Nomic
+      setAvailableEmbeddingModels([
+        "text-embedding-3-large",
+        "text-embedding-3-small",
+        "text-embedding-ada-002",
+        "nomic-embed-text",
+      ]);
+      setEmbeddingModelsLoaded(true);
     }
   };
 
@@ -268,6 +316,8 @@ const AdminConsole: React.FC = () => {
       if (configData.rag_content_scanning === undefined) {
         configData.rag_content_scanning = false;
       }
+      console.log('Loaded config:', configData);
+      console.log('Loaded model:', configData.openai_model);
       setConfig(configData);
     } catch (error) {
       console.error('Failed to load config:', error);
@@ -297,6 +347,7 @@ const AdminConsole: React.FC = () => {
         rag_content_scanning: ragContentScanning,
         rag_lakera_project_id: updates.rag_lakera_project_id ?? config.rag_lakera_project_id,
         openai_model: updates.openai_model ?? config.openai_model,
+        embeddings_model: updates.embeddings_model ?? config.embeddings_model,
         temperature: updates.temperature ?? config.temperature,
         system_prompt: updates.system_prompt ?? config.system_prompt,
         openai_api_key: updates.openai_api_key ?? config.openai_api_key,
@@ -312,12 +363,104 @@ const AdminConsole: React.FC = () => {
 
       await apiService.updateConfig(updatedConfig);
       await loadConfig();
-      await loadModels();
       setMessage({ type: 'success', text: 'Configuration updated successfully' });
     } catch (error) {
       console.error('Failed to update config:', error);
       setMessage({ type: 'error', text: 'Failed to update configuration' });
+      await loadConfig(); // Reload to revert to last saved state on error
     }
+  };
+
+  const handleModelChange = (newModel: string) => {
+    console.log('Model changed to:', newModel);
+    
+    // Optimistic update - immediately update UI without reloading
+    const updatedConfig: AppConfigUpdate = {
+      business_name: config.business_name,
+      tagline: config.tagline,
+      hero_text: config.hero_text,
+      hero_image_url: config.hero_image_url,
+      logo_url: config.logo_url,
+      theme: config.theme,
+      lakera_enabled: config.lakera_enabled,
+      lakera_blocking_mode: config.lakera_blocking_mode,
+      rag_content_scanning: config.rag_content_scanning,
+      rag_lakera_project_id: config.rag_lakera_project_id,
+      openai_model: newModel,
+      embeddings_model: config.embeddings_model,
+      temperature: config.temperature,
+      system_prompt: config.system_prompt,
+      openai_api_key: config.openai_api_key,
+      litellm_virtual_key: config.litellm_virtual_key,
+      litellm_guardrail_name: config.litellm_guardrail_name,
+      litellm_guardrail_monitor_name: config.litellm_guardrail_monitor_name,
+      lakera_api_key: config.lakera_api_key,
+      lakera_project_id: config.lakera_project_id,
+      use_litellm: config.use_litellm,
+      litellm_base_url: config.litellm_base_url,
+    };
+
+    console.log('Sending to backend:', updatedConfig);
+
+    // Update UI immediately
+    setConfig({ ...config, openai_model: newModel });
+    
+    // Save to backend without reloading
+    apiService.updateConfig(updatedConfig)
+      .then(() => {
+        console.log('Model saved successfully');
+        setMessage({ type: 'success', text: 'Model updated' });
+      })
+      .catch((error) => {
+        console.error('Failed to update model:', error);
+        setMessage({ type: 'error', text: 'Failed to update model' });
+        loadConfig(); // Revert on error
+      });
+  };
+
+  const handleEmbeddingModelChange = (newModel: string) => {
+    console.log('Embedding model changed to:', newModel);
+    
+    // Optimistic update
+    const updatedConfig: AppConfigUpdate = {
+      business_name: config.business_name,
+      tagline: config.tagline,
+      hero_text: config.hero_text,
+      hero_image_url: config.hero_image_url,
+      logo_url: config.logo_url,
+      theme: config.theme,
+      lakera_enabled: config.lakera_enabled,
+      lakera_blocking_mode: config.lakera_blocking_mode,
+      rag_content_scanning: config.rag_content_scanning,
+      rag_lakera_project_id: config.rag_lakera_project_id,
+      openai_model: config.openai_model,
+      embeddings_model: newModel,
+      temperature: config.temperature,
+      system_prompt: config.system_prompt,
+      openai_api_key: config.openai_api_key,
+      litellm_virtual_key: config.litellm_virtual_key,
+      litellm_guardrail_name: config.litellm_guardrail_name,
+      litellm_guardrail_monitor_name: config.litellm_guardrail_monitor_name,
+      lakera_api_key: config.lakera_api_key,
+      lakera_project_id: config.lakera_project_id,
+      use_litellm: config.use_litellm,
+      litellm_base_url: config.litellm_base_url,
+    };
+
+    // Update UI immediately
+    setConfig({ ...config, embeddings_model: newModel });
+    
+    // Save to backend
+    apiService.updateConfig(updatedConfig)
+      .then(() => {
+        console.log('Embedding model saved successfully');
+        setMessage({ type: 'success', text: 'Embedding model updated' });
+      })
+      .catch((error) => {
+        console.error('Failed to update embedding model:', error);
+        setMessage({ type: 'error', text: 'Failed to update embedding model' });
+        loadConfig(); // Revert on error
+      });
   };
 
   const handleExport = async () => {
@@ -417,7 +560,10 @@ const AdminConsole: React.FC = () => {
                 <span>Back to Demo</span>
               </Link>
             </div>
-            <h1 className="text-xl font-bold text-gray-900">Admin Console</h1>
+            <div className="text-center">
+              <h1 className="text-xl font-bold text-gray-900">Admin Console</h1>
+              <p className="text-xs text-gray-500">v{packageJson.version}</p>
+            </div>
             <div className="w-24"></div>
           </div>
         </div>
@@ -693,11 +839,6 @@ const AdminConsole: React.FC = () => {
           {activeTab === 'llm' && (
             <div className="space-y-6">
               <h2 className="text-lg font-semibold text-gray-900">LLM Configuration</h2>
-              {config.openai_model && availableModels.length > 0 && !availableModels.includes(config.openai_model) && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                  Current model may not be available for this key. Select a model below and save.
-                </div>
-              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -705,20 +846,51 @@ const AdminConsole: React.FC = () => {
                   </label>
                   <select
                     value={config.openai_model}
-                    onChange={(e) => handleConfigUpdate({ openai_model: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    onChange={(e) => handleModelChange(e.target.value)}
+                    disabled={availableModels.length === 0}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
                   >
-                    {config.openai_model && !availableModels.includes(config.openai_model) && (
-                      <option key={config.openai_model} value={config.openai_model}>
-                        {config.openai_model.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} (not available)
-                      </option>
+                    {availableModels.length === 0 ? (
+                      <option>Loading models...</option>
+                    ) : (
+                      availableModels.map((model) => (
+                        <option key={model} value={model}>
+                          {model.replace(/:latest$/i, '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </option>
+                      ))
                     )}
-                    {availableModels.map((model) => (
-                      <option key={model} value={model}>
-                        {model.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </option>
-                    ))}
                   </select>
+                  {availableModels.length === 0 && (
+                    <p className="mt-1 text-xs text-gray-500">Models are loading. Make sure you've entered a valid API key in Security settings.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Embeddings Model
+                  </label>
+                  <select
+                    value={config.embeddings_model || ''}
+                    onChange={(e) => handleEmbeddingModelChange(e.target.value)}
+                    disabled={!embeddingModelsLoaded || availableEmbeddingModels.length === 0}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  >
+                    {!embeddingModelsLoaded ? (
+                      <option>Loading models...</option>
+                    ) : availableEmbeddingModels.length === 0 ? (
+                      <option>No available embedding models</option>
+                    ) : (
+                      availableEmbeddingModels.map((model) => (
+                        <option key={model} value={model}>
+                          {model.replace(/:latest$/i, '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {!embeddingModelsLoaded ? (
+                    <p className="mt-1 text-xs text-gray-500">Embeddings models are loading...</p>
+                  ) : availableEmbeddingModels.length === 0 ? (
+                    <p className="mt-1 text-xs text-red-500">No available embedding models. Check your API key or LiteLLM connection.</p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -73,6 +73,16 @@ def _migrate_demo_prompts_preferred_llm():
             conn.commit()
 
 
+def _migrate_app_config_embeddings_model():
+    """Add embeddings_model to app_config if missing (existing DBs)."""
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(app_config)"))
+        columns = [row[1] for row in r.fetchall()]
+        if "embeddings_model" not in columns:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN embeddings_model VARCHAR"))
+            conn.commit()
+
+
 # Migration: add theme to app_config if missing (for UI theming)
 def _migrate_app_config_theme():
     with engine.connect() as conn:
@@ -86,6 +96,7 @@ def _migrate_app_config_theme():
 
 
 _migrate_app_config_litellm()
+_migrate_app_config_embeddings_model()
 
 
 def _migrate_app_config_litellm_virtual_key():
@@ -184,14 +195,16 @@ async def update_config(config_update: AppConfigUpdate, db: Session = Depends(ge
     for field, value in config_update.dict(exclude_unset=True).items():
         setattr(config, field, value)
 
-    # Auto-pick model when saving LiteLLM virtual key: if current model invalid for key, set to first allowed
-    use_litellm = getattr(config, "use_litellm", False)
-    if use_litellm and getattr(config, "litellm_virtual_key", None):
+    # Auto-pick models only when missing/null (don't override user's explicit selection)
+    if not config.openai_model:
         allowed = llm_client.get_models(config)
-        if allowed and (not config.openai_model or config.openai_model not in allowed):
+        if allowed:
             config.openai_model = allowed[0]
-    elif not use_litellm and config.openai_model not in llm_client.STATIC_MODELS:
-        config.openai_model = llm_client.STATIC_MODELS[0]
+
+    if not config.embeddings_model:
+        allowed_embeddings = llm_client.get_embedding_models(config)
+        if allowed_embeddings:
+            config.embeddings_model = allowed_embeddings[0]
 
     db.commit()
     db.refresh(config)
@@ -1195,3 +1208,13 @@ async def get_available_models():
         return {"models": models}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}") from e
+
+
+@app.get("/api/embeddings-models")
+async def get_available_embeddings_models():
+    """Get available embeddings models"""
+    try:
+        models = llm_client.get_embedding_models()
+        return {"models": models}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get embeddings models: {str(e)}") from e

@@ -335,7 +335,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ prompt, onSave, onCancel }) => 
               <option value="">None</option>
               {availableModels.map((model) => (
                 <option key={model} value={model}>
-                  {model.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                  {model.replace(/:latest$/i, '').replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                 </option>
               ))}
             </select>

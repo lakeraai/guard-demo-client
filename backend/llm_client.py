@@ -17,12 +17,13 @@ LITELLM_MODELS_TIMEOUT = 10.0
 STATIC_MODELS = [
     "gpt-5",
     "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-4o",
+    "gpt-5-nano","gpt-4o",
     "gpt-4o-mini",
     "gpt-4",
     "gpt-4-turbo",
     "gpt-3.5-turbo",
+    "llama3",
+    "qwen2.5",
     "anthropic-claude",
     "ollama-llama",
     "ollama-mistral",
@@ -31,10 +32,10 @@ STATIC_MODELS = [
 
 def _supports_custom_temperature(model: str) -> bool:
     """
-    GPT-5 family currently rejects non-default temperature values on chat completions.
+    Some models may not support custom temperature values.
     """
     name = (model or "").strip().lower()
-    return not name.startswith("gpt-5")
+    return True  # Most models support custom temperature
 
 
 class LiteLLMGuardrailError(Exception):
@@ -184,23 +185,23 @@ def _call_litellm_chat(
     return response.model_dump()
 
 
-def _get_embeddings_openai(texts: List[str], api_key: str) -> List[List[float]]:
+def _get_embeddings_openai(texts: List[str], api_key: str, model: str = "text-embedding-3-small") -> List[List[float]]:
     """Get embeddings from OpenAI directly"""
     client = openai.OpenAI(api_key=api_key)
     response = client.embeddings.create(
-        model="text-embedding-ada-002",
+        model=model,
         input=texts,
     )
     return [embedding.embedding for embedding in response.data]
 
 
 def _get_embeddings_litellm(
-    texts: List[str], api_key: str, base_url: str
+    texts: List[str], api_key: str, base_url: str, model: str = "text-embedding-3-small"
 ) -> List[List[float]]:
     """Get embeddings from LiteLLM proxy"""
     client = openai.OpenAI(api_key=api_key, base_url=f"{base_url.rstrip('/')}/v1")
     response = client.embeddings.create(
-        model="text-embedding-ada-002",
+        model=model,
         input=texts,
     )
     return [embedding.embedding for embedding in response.data]
@@ -284,6 +285,15 @@ def get_embeddings(texts: List[str], config: Optional[AppConfig] = None) -> List
         raise Exception("Configure LLM API key in Admin → Security")
 
     api_key = effective_llm_api_key(cfg) or ""
+    embeddings_model = getattr(cfg, "embeddings_model", None)
+    valid_models = get_embedding_models(cfg)
+    if valid_models:
+        if not embeddings_model or embeddings_model not in valid_models:
+            embeddings_model = valid_models[0]
+    elif not embeddings_model:
+        raise Exception(
+            "Unable to determine available embedding models. Check API credentials or LiteLLM connection."
+        )
 
     litellm_base_url = getattr(cfg, "litellm_base_url", None) or "http://localhost:4000"
 
@@ -293,9 +303,10 @@ def get_embeddings(texts: List[str], config: Optional[AppConfig] = None) -> List
                 texts=texts,
                 api_key=api_key,
                 base_url=litellm_base_url,
+                model=embeddings_model,
             )
         else:
-            return _get_embeddings_openai(texts=texts, api_key=api_key)
+            return _get_embeddings_openai(texts=texts, api_key=api_key, model=embeddings_model)
     except openai.APIConnectionError as e:
         if use_litellm:
             raise Exception(
@@ -330,20 +341,134 @@ def _get_models_litellm(api_key: str, base_url: str) -> Optional[List[str]]:
     return result if result else None
 
 
+def _is_standard_model(model_id: Optional[str]) -> bool:
+    if not isinstance(model_id, str) or not model_id.strip():
+        return False
+    normalized = model_id.strip().lower()
+    if "embed" in normalized or "embedding" in normalized:
+        return False
+    return True
+
+
 def get_models(config: Optional[AppConfig] = None) -> List[str]:
     """
     Get available models. When using LiteLLM, returns key-specific models from proxy.
     Falls back to static list when not using LiteLLM, or when LiteLLM fetch fails/returns empty.
+
+    Uses also STATIC_MODELS as a Whitelist filter to avoid of older or non-functional models. 
     """
     cfg = config or _get_config()
     if not cfg:
         return STATIC_MODELS
+
     use_litellm = getattr(cfg, "use_litellm", False)
     api_key = effective_llm_api_key(cfg)
-    if not use_litellm or not api_key:
+
+    if not api_key and not use_litellm:
         return STATIC_MODELS
+
+    # --- OpenAI direct mode ---
+    if not use_litellm:
+        models = _get_models_openai(api_key)
+        if models:
+        # filtered_models = [model for model in models if _is_standard_model(model)]
+        # Filter for standard models AND ensure they are in the STATIC_MODELS whitelist
+            filtered_models = [ 
+                model for model in models 
+                if _is_standard_model(model) and model in STATIC_MODELS
+                ]
+            return filtered_models or STATIC_MODELS
+        return STATIC_MODELS
+
+    # --- LiteLLM mode ---
     litellm_base_url = getattr(cfg, "litellm_base_url", None) or "http://localhost:4000"
-    models = _get_models_litellm(api_key=api_key, base_url=litellm_base_url)
+    models = _get_models_litellm(api_key=api_key or "", base_url=litellm_base_url)
     if models:
-        return models
+        filtered_models = [model for model in models 
+            if _is_standard_model(model) and model in STATIC_MODELS]
+        return filtered_models or STATIC_MODELS
+
     return STATIC_MODELS
+
+
+
+def _get_models_openai(api_key: str) -> Optional[List[str]]:
+    """
+    Fetch available models directly from OpenAI.
+    Returns list of model ids on success, None on failure.
+    Added by Vince 6/9/26
+    """
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.models.list()
+        return [m.id for m in resp.data] if resp.data else None
+    except Exception:
+        return None
+
+
+def get_embedding_models(config: Optional[AppConfig] = None) -> List[str]:
+    """
+    Get available embeddings models.
+    For OpenAI direct: filter chat models to find embedding models.
+    For LiteLLM: call /v1/models and filter for embeddings.
+    Falls back to common defaults.
+    """
+    EMBEDDING_DEFAULTS = [
+        "text-embedding-3-large",
+        "text-embedding-3-small",
+        "text-embedding-ada-002",
+        "nomic-embed-text",
+    ]
+
+    cfg = config or _get_config()
+    if not cfg:
+        return EMBEDDING_DEFAULTS
+
+    use_litellm = getattr(cfg, "use_litellm", False)
+    api_key = effective_llm_api_key(cfg)
+
+    # Helper to detect embedding model ids
+    def _filter_embedding_model(model_id: Optional[str]) -> bool:
+        if not isinstance(model_id, str) or not model_id.strip():
+            return False
+        normalized = model_id.strip().lower()
+        return "embed" in normalized or "embedding" in normalized
+
+    # --- OpenAI direct mode ---
+    if not use_litellm:
+        if not api_key:
+            return EMBEDDING_DEFAULTS
+        try:
+            client = openai.OpenAI(api_key=api_key)
+            models = client.models.list()
+
+            # Filter for embedding models AND ensure they are in the EMBEDDING_DEFAULTS whitelist
+            embedding_models = [m.id for m in models.data 
+                if _filter_embedding_model(m.id) and m.id in EMBEDDING_DEFAULTS]
+            result = embedding_models if embedding_models else EMBEDDING_DEFAULTS.copy()
+#          if "nomic-embed-text" not in result:
+#                result.append("nomic-embed-text")
+            return result
+        except Exception:
+            return EMBEDDING_DEFAULTS
+
+    # --- LiteLLM mode ---
+    litellm_base_url = getattr(cfg, "litellm_base_url", None) or "http://localhost:4000"
+    url = f"{litellm_base_url.rstrip('/')}/v1/models"
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    try:
+        with httpx.Client(timeout=LITELLM_MODELS_TIMEOUT) as client:
+            resp = client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            models = data.get("data", [])
+            embedding_models = [m.get("id") for m in models 
+                if isinstance(m, dict) and _filter_embedding_model(m.get("id") in EMBEDDING_DEFAULTS  )]
+                                                                   
+            result = embedding_models if embedding_models else EMBEDDING_DEFAULTS.copy()
+#            if "nomic-embed-text" not in result:
+#                result.append("nomic-embed-text")
+            return result
+    except Exception:
+        return EMBEDDING_DEFAULTS
+

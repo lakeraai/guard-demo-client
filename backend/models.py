@@ -20,6 +20,7 @@ class AppConfig(Base):
     logo_url = Column(String, nullable=True)
     system_prompt = Column(Text, nullable=True)
     openai_model = Column(String, default="gpt-4o-mini")
+    embeddings_model = Column(String, nullable=True)
     temperature = Column(String, default="7")
     lakera_enabled = Column(Boolean, default=True)
     lakera_blocking_mode = Column(Boolean, default=False)

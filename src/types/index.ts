@@ -17,6 +17,7 @@ export interface AppConfig {
   rag_lakera_project_id?: string;
   lakera_project_id?: string;
   openai_model: string;
+  embeddings_model?: string;
   temperature: number;
   system_prompt?: string;
   openai_api_key?: string;
@@ -42,6 +43,7 @@ export interface AppConfigUpdate {
   rag_content_scanning: boolean;
   rag_lakera_project_id?: string;
   openai_model: string;
+  embeddings_model?: string;
   temperature: number;
   system_prompt?: string;
   openai_api_key?: string;

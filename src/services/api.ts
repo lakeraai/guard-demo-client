@@ -223,6 +223,10 @@ class ApiService {
   async getModels(): Promise<{ models: string[] }> {
     return this.request<{ models: string[] }>('/models');
   }
+
+  async getEmbeddingModels(): Promise<{ models: string[] }> {
+    return this.request<{ models: string[] }>('/embeddings-models');
+  }
 }
 
 export const apiService = new ApiService();

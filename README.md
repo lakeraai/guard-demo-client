@@ -231,9 +231,11 @@ All API routes are under the `/api` prefix.
 - `POST /api/chat` - Send message to AI assistant
 
 ### RAG
-- `POST /api/rag/upload` - Upload documents
+- `POST /api/rag/upload` - Upload and Ingest documents
 - `POST /api/rag/generate` - Generate AI content
 - `GET /api/rag/search` - Search stored content
+- `GET /api/rag/sources` - Request all RAG sources
+- `GET /api/rag/clear` -  Clear All RAG content 
 
 ### Tools
 - `GET /api/tools` - List tools
@@ -241,6 +243,7 @@ All API routes are under the `/api` prefix.
 - `PUT /api/tools/{id}` - Update tool
 - `DELETE /api/tools/{id}` - Delete tool
 - `POST /api/tools/test/{id}` - Test tool
+- `GET /api/tools/{id}/capabilities` - Request Capabilities of an MCP Tool
 
 ### Lakera
 - `GET /api/lakera/last` - Get last guardrail result
@@ -252,6 +255,10 @@ All API routes are under the `/api` prefix.
 - `PUT /api/demo-prompts/{id}` - Update demo prompt
 - `DELETE /api/demo-prompts/{id}` - Delete demo prompt
 - `POST /api/demo-prompts/{id}/use` - Track prompt usage
+
+### AI Models
+- `GET /api/models` - Request available Models
+- `GET /api/embeddings-models` - Request available Embedding Models
 
 ## 📁 Project Structure
 
